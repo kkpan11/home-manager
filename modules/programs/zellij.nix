@@ -22,6 +22,7 @@ in
 {
   meta.maintainers = [
     lib.maintainers.khaneliman
+    lib.maintainers.PerchunPak
     lib.hm.maintainers.mainrs
   ];
 
@@ -30,13 +31,157 @@ in
 
     package = lib.mkPackageOption pkgs "zellij" { };
 
+    finalPackage = mkOption {
+      type = types.package;
+      visible = false;
+      readOnly = true;
+      description = ''
+        The zellij package with all plugin dependencies.
+      '';
+    };
+
+    layouts = lib.mkOption {
+      type = types.attrsOf (
+        types.oneOf [
+          yamlFormat.type
+          types.path
+          types.lines
+        ]
+      );
+      default = { };
+      example = {
+        dev = {
+          layout = {
+            _children = [
+              {
+                default_tab_template = {
+                  _children = [
+                    {
+                      pane = {
+                        size = 1;
+                        borderless = true;
+                        plugin = {
+                          location = "zellij:tab-bar";
+                        };
+                      };
+                    }
+                    { "children" = { }; }
+                    {
+                      pane = {
+                        size = 2;
+                        borderless = true;
+                        plugin = {
+                          location = "zellij:status-bar";
+                        };
+                      };
+                    }
+                  ];
+                };
+              }
+              {
+                tab = {
+                  _props = {
+                    name = "Project";
+                    focus = true;
+                  };
+                  _children = [
+                    {
+                      pane = {
+                        command = "nvim";
+                      };
+                    }
+                  ];
+                };
+              }
+              {
+                tab = {
+                  _props = {
+                    name = "Git";
+                  };
+                  _children = [
+                    {
+                      pane = {
+                        command = "lazygit";
+                      };
+                    }
+                  ];
+                };
+              }
+              {
+                tab = {
+                  _props = {
+                    name = "Files";
+                  };
+                  _children = [
+                    {
+                      pane = {
+                        command = "yazi";
+                      };
+                    }
+                  ];
+                };
+              }
+              {
+                tab = {
+                  _props = {
+                    name = "Shell";
+                  };
+                  _children = [
+                    {
+                      pane = {
+                        command = "zsh";
+                      };
+                    }
+                  ];
+                };
+              }
+            ];
+          };
+        };
+      };
+      description = ''
+        Configuration written to
+        {file}`$XDG_CONFIG_HOME/zellij/layouts/<layout>.kdl`.
+
+        See <https://zellij.dev/documentation> for the full
+        list of options.
+      '';
+    };
+
+    plugins = mkOption {
+      type = types.listOf types.package;
+      default = [ ];
+      example = lib.literalExpression ''
+        with pkgs.zellijPlugins; [ jbz vim-plugins-navigator zjstatus ]
+      '';
+      description = "List of Zellij plugins";
+    };
+
     settings = lib.mkOption {
-      type = yamlFormat.type;
+      inherit (yamlFormat) type;
       default = { };
       example = lib.literalExpression ''
         {
           theme = "custom";
           themes.custom.fg = "#ffffff";
+          keybinds._props.clear-defaults = true;
+          keybinds.pane._children = [
+            {
+              bind = {
+                _args = ["e"];
+                _children = [
+                  { TogglePaneEmbedOrFloating = {}; }
+                  { SwitchToMode._args = ["locked"]; }
+                ];
+              };
+            }
+            {
+              bind = {
+                _args = ["left"];
+                MoveFocus = ["left"];
+              };
+            }
+          ];
         }
       '';
       description = ''
@@ -48,6 +193,38 @@ in
 
         See <https://zellij.dev/documentation> for the full
         list of options.
+      '';
+    };
+    extraConfig = lib.mkOption {
+      description = ''
+        Extra configuration lines to add to `$XDG_CONFIG_HOME/zellij/config.kdl`.
+
+        This does not support zellij.yaml and it's mostly a workaround for https://github.com/nix-community/home-manager/issues/4659.
+      '';
+      type = lib.types.lines;
+      default = "";
+      example = ''
+        keybinds {
+            // keybinds are divided into modes
+            normal {
+                // bind instructions can include one or more keys (both keys will be bound separately)
+                // bind keys can include one or more actions (all actions will be performed with no sequential guarantees)
+                bind "Ctrl g" { SwitchToMode "locked"; }
+                bind "Ctrl p" { SwitchToMode "pane"; }
+                bind "Alt n" { NewPane; }
+                bind "Alt h" "Alt Left" { MoveFocusOrTab "Left"; }
+            }
+            pane {
+                bind "h" "Left" { MoveFocus "Left"; }
+                bind "l" "Right" { MoveFocus "Right"; }
+                bind "j" "Down" { MoveFocus "Down"; }
+                bind "k" "Up" { MoveFocus "Up"; }
+                bind "p" { SwitchFocus; }
+            }
+            locked {
+                bind "Ctrl g" { SwitchToMode "normal"; }
+            }
+        }
       '';
     };
 
@@ -71,6 +248,21 @@ in
       '';
     };
 
+    themes = mkOption {
+      type = types.attrsOf (
+        types.oneOf [
+          yamlFormat.type
+          types.path
+          types.lines
+        ]
+      );
+      default = { };
+      description = ''
+        Each them is written to {file}`$XDG_CONFIG_HOME/zellij/themes/NAME.kdl`.
+        See <https://zellij.dev/documentation/themes.html> for more information.
+      '';
+    };
+
     enableBashIntegration = mkShellIntegrationOption (
       lib.hm.shell.mkBashIntegrationOption { inherit config; }
     );
@@ -89,36 +281,136 @@ in
       shellIntegrationEnabled = (
         cfg.enableBashIntegration || cfg.enableZshIntegration || cfg.enableFishIntegration
       );
+      pluginsWithNames = lib.map (plugin: {
+        inherit plugin;
+        name = lib.removePrefix "zellij-" plugin.pname;
+      }) cfg.plugins;
+      pluginRuntimeDeps = lib.concatLists (
+        lib.map ({ plugin, ... }: plugin.runtimeDeps or [ ]) pluginsWithNames
+      );
+      toKDL = lib.hm.generators.toKDL {
+        escapeBackslashes = lib.versionAtLeast config.home.stateVersion "26.11";
+        escapeTabs = lib.versionAtLeast config.home.stateVersion "26.11";
+      };
     in
     mkIf cfg.enable {
-      home.packages = [ cfg.package ];
+      home.packages = [ cfg.finalPackage ];
+      programs.zellij.finalPackage =
+        if pluginRuntimeDeps != [ ] then
+          cfg.package.override {
+            extraPackages = pluginRuntimeDeps;
+          }
+        else
+          cfg.package;
 
       # Zellij switched from yaml to KDL in version 0.32.0:
       # https://github.com/zellij-org/zellij/releases/tag/v0.32.0
-      xdg.configFile."zellij/config.yaml" =
-        mkIf (cfg.settings != { } && (lib.versionOlder cfg.package.version "0.32.0"))
-          {
-            source = yamlFormat.generate "zellij.yaml" cfg.settings;
-          };
+      xdg.configFile = lib.mkMerge [
+        {
 
-      xdg.configFile."zellij/config.kdl" =
-        mkIf (cfg.settings != { } && (lib.versionAtLeast cfg.package.version "0.32.0"))
-          {
-            text = lib.hm.generators.toKDL { } cfg.settings;
-          };
+          "zellij/config.yaml" =
+            mkIf ((lib.versionOlder cfg.finalPackage.version "0.32.0") && cfg.settings != { })
+              {
+                source = yamlFormat.generate "zellij.yaml" cfg.settings;
+              };
+          "zellij/config.kdl" =
+            mkIf
+              (
+                (lib.versionAtLeast cfg.finalPackage.version "0.32.0")
+                && (cfg.settings != { } || cfg.extraConfig != "")
+              )
+              {
+                text =
+                  (toKDL cfg.settings)
+                  + lib.optionalString (cfg.extraConfig != "") (
+                    ''
+
+                      // extraConfig
+
+                    ''
+                    + cfg.extraConfig
+                  );
+              };
+        }
+
+        (lib.mapAttrs' (
+          name: value:
+          lib.nameValuePair "zellij/layouts/${name}.kdl" {
+            source =
+              if builtins.isPath value || lib.isStorePath value then
+                value
+              else
+                pkgs.writeText "zellij-layout-${name}" (if lib.isString value then value else toKDL value);
+          }
+        ) cfg.layouts)
+
+        (lib.mapAttrs' (
+          name: value:
+          lib.nameValuePair "zellij/themes/${name}.kdl" {
+            source =
+              if builtins.isPath value || lib.isStorePath value then
+                value
+              else
+                pkgs.writeText "zellij-theme-${name}" (if lib.isString value then value else toKDL value);
+          }
+        ) cfg.themes)
+
+        # on every plugin update, zellij asks for permissions again, because
+        # the plugin path has changed (=/nix/store path has changed)
+        # to avoid that, we symlink all plugins to `.config/zellij/plugins` and
+        # use those paths
+        (lib.listToAttrs (
+          lib.map (
+            { plugin, name }:
+            {
+              name = "zellij/plugins/${name}.wasm";
+              value.source = plugin;
+            }
+          ) pluginsWithNames
+        ))
+      ];
+      programs.zellij.settings = {
+        # define plugin aliases
+        plugins = mkIf (pluginsWithNames != [ ]) (
+          lib.listToAttrs (
+            lib.map (
+              { name, ... }:
+              {
+                inherit name;
+                value._props.location = "file:${config.xdg.configHome}/zellij/plugins/${name}.wasm";
+              }
+            ) pluginsWithNames
+          )
+        );
+        # auto-load plugins on start
+        load_plugins = mkIf (pluginsWithNames != [ ]) {
+          _children = lib.map (
+            { name, ... }:
+            {
+              ${name} = [ ];
+            }
+          ) pluginsWithNames;
+        };
+      };
 
       programs.bash.initExtra = mkIf cfg.enableBashIntegration ''
-        eval "$(${lib.getExe cfg.package} setup --generate-auto-start bash)"
+        if [[ "$TERM" != "dumb" ]]; then
+            eval "$(${lib.getExe cfg.finalPackage} setup --generate-auto-start bash)"
+        fi
       '';
 
       programs.zsh.initContent = mkIf cfg.enableZshIntegration (
         lib.mkOrder 200 ''
-          eval "$(${lib.getExe cfg.package} setup --generate-auto-start zsh)"
+          if [[ "$TERM" != "dumb" ]]; then
+              eval "$(${lib.getExe cfg.finalPackage} setup --generate-auto-start zsh)"
+          fi
         ''
       );
 
       programs.fish.interactiveShellInit = mkIf cfg.enableFishIntegration ''
-        eval (${lib.getExe cfg.package} setup --generate-auto-start fish | string collect)
+        if test "$TERM" != "dumb"
+            eval (${lib.getExe cfg.finalPackage} setup --generate-auto-start fish | string collect)
+        end
       '';
 
       home.sessionVariables = mkIf shellIntegrationEnabled {

@@ -2,9 +2,10 @@
   config = {
     programs.ssh = {
       enable = true;
-      matchBlocks = {
+      enableDefaultConfig = false;
+      settings = {
         localBindPathWithPort = {
-          localForwards = [
+          LocalForward = [
             {
               # OK:
               host.address = "127.0.0.1";

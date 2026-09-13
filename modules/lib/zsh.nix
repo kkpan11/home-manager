@@ -7,9 +7,12 @@ rec {
     if builtins.isBool v then
       if v then "true" else "false"
     else if builtins.isString v then
-      ''"${v}"''
+      ''"${lib.escape [ "\\" "\"" "`" ] v}"''
     else if builtins.isList v then
-      "(${lib.concatStringsSep " " (map toZshValue v)})"
+      let
+        shell = import ./shell.nix { inherit lib; };
+      in
+      "(${shell.formatShellArrayContent (map toString v)})"
     else
       ''"${toString v}"'';
 
@@ -27,5 +30,15 @@ rec {
   # Given an attribute set containing shell variable names and their
   # assignments, this function produces a string containing an export
   # statement for each set entry.
-  exportAll = vars: lib.concatStringsSep "\n" (lib.mapAttrsToList export vars);
+  exportAll =
+    vars:
+    {
+      indent ? "",
+    }:
+    let
+      separator = if indent == "" then "\n" else "\n" + indent;
+    in
+    lib.concatStringsSep separator (
+      lib.mapAttrsToList export (lib.filterAttrs (_k: v: v != null) vars)
+    );
 }

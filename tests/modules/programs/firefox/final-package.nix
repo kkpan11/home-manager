@@ -12,10 +12,10 @@ let
 
 in
 lib.mkIf config.test.enableBig (
-  lib.setAttrByPath modulePath { enable = true; }
+  lib.setAttrByPath modulePath {
+    enable = true;
+  }
   // {
-    home.stateVersion = "19.09";
-
     _module.args.pkgs = lib.mkForce realPkgs;
 
     nmt.script = ''

@@ -15,6 +15,8 @@ in
 
       package = lib.mkPackageOption pkgs "alacritty" { nullable = true; };
 
+      themePackage = lib.mkPackageOption pkgs "alacritty-theme" { };
+
       theme = lib.mkOption {
         type = with lib.types; nullOr str;
         default = null;
@@ -32,23 +34,21 @@ in
       };
 
       settings = lib.mkOption {
-        type = tomlFormat.type;
+        inherit (tomlFormat) type;
         default = { };
-        example = lib.literalExpression ''
-          {
-            window.dimensions = {
-              lines = 3;
-              columns = 200;
-            };
-            keyboard.bindings = [
-              {
-                key = "K";
-                mods = "Control";
-                chars = "\\u000c";
-              }
-            ];
-          }
-        '';
+        example = {
+          window.dimensions = {
+            lines = 3;
+            columns = 200;
+          };
+          keyboard.bindings = [
+            {
+              key = "K";
+              mods = "Control";
+              chars = "\\u000c";
+            }
+          ];
+        };
         description = ''
           Configuration written to
           {file}`$XDG_CONFIG_HOME/alacritty/alacritty.yml` or
@@ -62,29 +62,33 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    assertions = [
-      {
-        # If using the theme option, ensure that theme exists in the
-        # alacritty-theme package.
-        assertion =
-          let
-            available = lib.pipe "${pkgs.alacritty-theme}/share/alacritty-theme" [
-              builtins.readDir
-              (lib.filterAttrs (name: type: type == "regular" && lib.hasSuffix ".toml" name))
-              lib.attrNames
-              (lib.map (lib.removeSuffix ".toml"))
-            ];
-          in
-          cfg.theme == null || (builtins.elem cfg.theme available);
-        message = "The alacritty theme '${cfg.theme}' does not exist.";
-      }
-    ];
-
     home.packages = lib.mkIf (cfg.package != null) [ cfg.package ];
 
     programs.alacritty.settings =
       let
-        theme = "${pkgs.alacritty-theme}/share/alacritty-theme/${cfg.theme}.toml";
+        # We want to check that the theme actually exists.
+        # We need to do this at build time, to avoid IFD.
+        alacrittyTheme = cfg.themePackage.overrideAttrs (prevAttrs: {
+          name = "alacritty-theme-for-home-manager";
+          postInstall =
+            let
+              inherit (config.programs.alacritty) theme;
+            in
+            lib.concatStringsSep "\n" [
+              (prevAttrs.postInstall or "")
+              (lib.optionalString (theme != null)
+                # bash
+                ''
+                  if [ ! -f "$out/share/alacritty-theme/${theme}.toml" ]; then
+                    echo "error: alacritty theme '${theme}' does not exist"
+                    exit 1
+                  fi
+                ''
+              )
+            ];
+        });
+
+        theme = "${alacrittyTheme}/share/alacritty-theme/${cfg.theme}.toml";
       in
       lib.mkIf (cfg.theme != null) {
         general.import = lib.mkIf (lib.versionAtLeast cfg.package.version "0.14") [ theme ];
@@ -92,15 +96,37 @@ in
       };
 
     xdg.configFile."alacritty/alacritty.toml" = lib.mkIf (cfg.settings != { }) {
-      source = (tomlFormat.generate "alacritty.toml" cfg.settings).overrideAttrs (
-        finalAttrs: prevAttrs: {
-          buildCommand = lib.concatStringsSep "\n" [
-            prevAttrs.buildCommand
-            # TODO: why is this needed? Is there a better way to retain escape sequences?
-            "substituteInPlace $out --replace-quiet '\\\\' '\\'"
-          ];
-        }
-      );
+      source =
+        let
+          # `pkgs.formats.toml` escapes backslashes and cannot emit raw
+          # control characters (NUL cannot even appear in a Nix string), so a
+          # `chars` escape like "\u001d" generates as literal "\\u001d",
+          # which Alacritty rejects. Stash each escape behind a placeholder that
+          # survives generation, then restore "\u" in the build command.
+          unicodeEscapePrefix = "__home_manager_alacritty_unicode_escape_";
+
+          normalizeAlacrittyEscapes =
+            value:
+            if builtins.isAttrs value then
+              lib.mapAttrs (_: normalizeAlacrittyEscapes) value
+            else if builtins.isList value then
+              map normalizeAlacrittyEscapes value
+            else if !builtins.isString value then
+              value
+            else
+              # Normalize the "\^[" caret form to "\u001b", then replace every
+              # "\uXXXX" with the placeholder.
+              lib.concatMapStrings (
+                chunk: if builtins.isList chunk then unicodeEscapePrefix + builtins.head chunk else chunk
+              ) (builtins.split "\\\\u([0-9a-fA-F]{4})" (builtins.replaceStrings [ "\\^[" ] [ "\\u001b" ] value));
+        in
+        (tomlFormat.generate "alacritty.toml" (normalizeAlacrittyEscapes cfg.settings)).overrideAttrs
+          (prevAttrs: {
+            buildCommand = lib.concatStringsSep "\n" [
+              prevAttrs.buildCommand
+              ''substituteInPlace $out --replace-quiet '${unicodeEscapePrefix}' '\u' ''
+            ];
+          });
     };
   };
 }

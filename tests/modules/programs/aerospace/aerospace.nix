@@ -1,23 +1,28 @@
+{ config, pkgs, ... }:
+let
+  hmPkgs = pkgs.extend (
+    _self: _super: {
+      aerospace = config.lib.test.mkStubPackage {
+        name = "aerospace";
+        buildScript = ''
+          mkdir -p $out/bin
+          touch $out/bin/aerospace
+          chmod 755 $out/bin/aerospace
+        '';
+      };
+    }
+  );
+in
 {
+  xdg.enable = true;
+
   programs.aerospace = {
     enable = true;
-    userSettings = {
-      gaps = {
-        outer.left = 8;
-        outer.bottom = 8;
-        outer.top = 8;
-        outer.right = 8;
-      };
-      mode.main.binding = {
-        alt-h = "focus left";
-        alt-j = "focus down";
-        alt-k = "focus up";
-        alt-l = "focus right";
-      };
-    };
+    package = hmPkgs.aerospace;
   };
 
   nmt.script = ''
-    assertFileContent home-files/.config/aerospace/aerospace.toml ${./settings-expected.toml}
+    # aerospace just create the config file if we open it by hand, otherwise he's use directly the default config
+    assertPathNotExists "home-files/.config/aerospace"
   '';
 }

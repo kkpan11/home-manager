@@ -84,13 +84,7 @@ in
         description = "Use xautolock for time-based locking.";
       };
 
-      package = mkOption {
-        type = types.package;
-        default = pkgs.xautolock;
-        description = ''
-          Package providing the {command}`xautolock` binary.
-        '';
-      };
+      package = lib.mkPackageOption pkgs "xautolock" { };
 
       detectSleep = mkOption {
         type = types.bool;
@@ -112,13 +106,7 @@ in
     };
 
     xss-lock = {
-      package = mkOption {
-        type = types.package;
-        default = pkgs.xss-lock;
-        description = ''
-          Package providing the {command}`xss-lock` binary.
-        '';
-      };
+      package = lib.mkPackageOption pkgs "xss-lock" { };
 
       extraOptions = mkOption {
         type = types.listOf types.str;
@@ -173,7 +161,7 @@ in
         };
       }
       (mkIf (!cfg.xautolock.enable) {
-        systemd.user.services.xss-lock.Service.ExecStartPre = "${pkgs.xorg.xset}/bin/xset s ${
+        systemd.user.services.xss-lock.Service.ExecStartPre = "${lib.getExe pkgs.xset} s ${
           toString (cfg.inactiveInterval * 60)
         } ${toString cfg.xss-lock.screensaverCycle}";
       })

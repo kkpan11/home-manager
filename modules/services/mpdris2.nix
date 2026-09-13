@@ -19,15 +19,13 @@ let
   };
 
   mpdris2Conf = {
-    Connection =
-      {
-        host = cfg.mpd.host;
-        port = cfg.mpd.port;
-        music_dir = cfg.mpd.musicDirectory;
-      }
-      // lib.optionalAttrs (cfg.mpd.password != null) {
-        password = cfg.mpd.password;
-      };
+    Connection = {
+      inherit (cfg.mpd) host port;
+      music_dir = cfg.mpd.musicDirectory;
+    }
+    // lib.optionalAttrs (cfg.mpd.password != null) {
+      inherit (cfg.mpd) password;
+    };
 
     Bling = {
       notify = cfg.notifications;
@@ -44,12 +42,7 @@ in
     notifications = mkEnableOption "song change notifications";
     multimediaKeys = mkEnableOption "multimedia key support";
 
-    package = mkOption {
-      type = types.package;
-      default = pkgs.mpdris2;
-      defaultText = lib.literalExpression "pkgs.mpdris2";
-      description = "The mpDris2 package to use.";
-    };
+    package = lib.mkPackageOption pkgs "mpdris2" { };
 
     mpd = {
       host = mkOption {

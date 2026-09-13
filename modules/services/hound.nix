@@ -25,10 +25,12 @@ let
 
 in
 {
-  meta.maintainers = [ lib.maintainers.adisbladis ];
+  meta.maintainers = [ ];
 
   options.services.hound = {
     enable = lib.mkEnableOption "hound";
+
+    package = lib.mkPackageOption pkgs "hound" { };
 
     maxConcurrentIndexers = mkOption {
       type = types.ints.positive;
@@ -70,7 +72,7 @@ in
       (lib.hm.assertions.assertPlatform "services.hound" pkgs lib.platforms.linux)
     ];
 
-    home.packages = [ pkgs.hound ];
+    home.packages = [ cfg.package ];
 
     systemd.user.services.hound = {
       Unit = {
@@ -90,7 +92,7 @@ in
             ]
           }"
         ];
-        ExecStart = "${pkgs.hound}/bin/houndd ${lib.concatStringsSep " " houndOptions}";
+        ExecStart = "${lib.getExe' cfg.package "houndd"} ${lib.concatStringsSep " " houndOptions}";
       };
     };
   };

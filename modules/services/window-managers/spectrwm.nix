@@ -35,61 +35,50 @@ let
 
 in
 {
-  meta.maintainers = [ lib.hm.maintainers.loicreynier ];
+  meta.maintainers = [ lib.maintainers.loicreynier ];
 
   options = {
     xsession.windowManager.spectrwm = {
       enable = lib.mkEnableOption "Spectrwm window manager";
 
-      package = mkOption {
-        type = types.package;
-        default = pkgs.spectrwm;
-        defaultText = literalExpression "pkgs.spectrwm";
-        description = ''
-          Package providing the {command}`spectrwm` command.
-        '';
+      package = lib.mkPackageOption pkgs "spectrwm" {
+        extraDescription = "providing the spectrwm command";
       };
 
       settings = mkOption {
         type = types.attrsOf settingType;
         default = { };
-        example = literalExpression ''
-          {
-            modkey = "Mod4";
-            workspace_limit = 5;
-            focus_mode = "manual";
-            focus_close = "next";
-          }
-        '';
+        example = {
+          modkey = "Mod4";
+          workspace_limit = 5;
+          focus_mode = "manual";
+          focus_close = "next";
+        };
         description = "Spectrwm settings.";
       };
 
       bindings = mkOption {
         type = types.attrsOf types.str;
         default = { };
-        example = literalExpression ''
-          {
-            term = "Mod+Return";
-            restart = "Mod+Shift+r";
-            quit = "Mod+Shift+q";
-          }
-        '';
+        example = {
+          term = "Mod+Return";
+          restart = "Mod+Shift+r";
+          quit = "Mod+Shift+q";
+        };
         description = "Spectrwm keybindings.";
       };
 
       unbindings = mkOption {
         type = types.listOf types.str;
         default = [ ];
-        example = literalExpression ''
-          [
-            "MOD+e"
-            "MOD+f"
-            "MOD+m"
-            "MOD+s"
-            "MOD+u"
-            "MOD+t"
-          ]
-        '';
+        example = [
+          "MOD+e"
+          "MOD+f"
+          "MOD+m"
+          "MOD+s"
+          "MOD+u"
+          "MOD+t"
+        ];
         description = ''
           List of keybindings to disable from default Spectrwm configuration.
         '';
@@ -110,12 +99,10 @@ in
       quirks = mkOption {
         type = types.attrsOf types.str;
         default = { };
-        example = literalExpression ''
-          {
-            Matplotlib = "FLOAT";
-            Pavucontrol = "FLOAT";
-          }
-        '';
+        example = {
+          Matplotlib = "FLOAT";
+          Pavucontrol = "FLOAT";
+        };
         description = "Spectrwm quicks (custom window rules).";
       };
     };

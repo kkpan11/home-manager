@@ -6,7 +6,7 @@
 }:
 
 {
-  xdg.enable = lib.mkIf pkgs.stdenv.isDarwin false;
+  xdg.enable = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin false;
 
   programs.k9s = {
     enable = true;
@@ -21,13 +21,11 @@
         ui.skin = "default";
       };
     };
-    hotkey = {
-      hotKey = {
-        shift-0 = {
-          shortCut = "Shift-0";
-          description = "Viewing pods";
-          command = "pods";
-        };
+    hotKeys = {
+      shift-0 = {
+        shortCut = "Shift-0";
+        description = "Viewing pods";
+        command = "pods";
       };
     };
     skins = {
@@ -60,52 +58,45 @@
       };
     };
     aliases = {
-      alias = {
-        pp = "v1/pods";
-      };
+      pp = "v1/pods";
     };
-    plugin = {
-      plugin = {
-        fred = {
-          shortCut = "Ctrl-L";
-          description = "Pod logs";
-          scopes = [ "po" ];
-          command = "kubectl";
-          background = false;
-          args = [
-            "logs"
-            "-f"
-            "$NAME"
-            "-n"
-            "$NAMESPACE"
-            "--context"
-            "$CLUSTER"
-          ];
-        };
+    plugins = {
+      fred = {
+        shortCut = "Ctrl-L";
+        description = "Pod logs";
+        scopes = [ "po" ];
+        command = "kubectl";
+        background = false;
+        args = [
+          "logs"
+          "-f"
+          "$NAME"
+          "-n"
+          "$NAMESPACE"
+          "--context"
+          "$CLUSTER"
+        ];
       };
     };
     views = {
-      k9s = {
-        views = {
-          "v1/pods" = {
-            columns = [
-              "AGE"
-              "NAMESPACE"
-              "NAME"
-              "IP"
-              "NODE"
-              "STATUS"
-              "READY"
-            ];
-          };
-        };
+      "v1/pods" = {
+        columns = [
+          "AGE"
+          "NAMESPACE"
+          "NAME"
+          "IP"
+          "NODE"
+          "STATUS"
+          "READY"
+        ];
       };
     };
   };
 
   nmt.script =
     let
-      configDir = if !pkgs.stdenv.isDarwin then ".config/k9s" else "Library/Application Support/k9s";
+      configDir =
+        if !pkgs.stdenv.hostPlatform.isDarwin then ".config/k9s" else "Library/Application Support/k9s";
     in
     ''
       assertFileExists "home-files/${configDir}/config.yaml"
@@ -124,18 +115,16 @@
       assertFileContent \
         "home-files/${configDir}/skins/alt-skin.yaml" \
         ${./example-skin-expected-alt.yaml}
-      assertFileExists "home-files/${configDir}/hotkeys.yaml"
       assertFileContent \
         "home-files/${configDir}/hotkeys.yaml" \
-        ${./example-hotkey-expected.yaml}
+        ${./example-hotkeys-expected.yaml}
       assertFileExists "home-files/${configDir}/aliases.yaml"
       assertFileContent \
         "home-files/${configDir}/aliases.yaml" \
         ${./example-aliases-expected.yaml}
-      assertFileExists "home-files/${configDir}/plugins.yaml"
       assertFileContent \
         "home-files/${configDir}/plugins.yaml" \
-        ${./example-plugin-expected.yaml}
+        ${./example-plugins-expected.yaml}
       assertFileExists "home-files/${configDir}/views.yaml"
       assertFileContent \
         "home-files/${configDir}/views.yaml" \

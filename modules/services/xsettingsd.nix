@@ -8,7 +8,6 @@
 let
   inherit (lib)
     mkOption
-    literalExpression
     types
     ;
 
@@ -37,14 +36,7 @@ in
     services.xsettingsd = {
       enable = lib.mkEnableOption "xsettingsd";
 
-      package = mkOption {
-        type = types.package;
-        default = pkgs.xsettingsd;
-        defaultText = literalExpression "pkgs.xsettingsd";
-        description = ''
-          Package containing the {command}`xsettingsd` program.
-        '';
-      };
+      package = lib.mkPackageOption pkgs "xsettingsd" { };
 
       settings = mkOption {
         type =
@@ -55,14 +47,12 @@ in
             str
           ]);
         default = { };
-        example = literalExpression ''
-          {
-            "Net/ThemeName" = "Numix";
-            "Xft/Antialias" = true;
-            "Xft/Hinting" = true;
-            "Xft/RGBA" = "rgb";
-          }
-        '';
+        example = {
+          "Net/ThemeName" = "Numix";
+          "Xft/Antialias" = true;
+          "Xft/Hinting" = true;
+          "Xft/RGBA" = "rgb";
+        };
         description = ''
           Xsettingsd options for configuration file. See
           <https://github.com/derat/xsettingsd/wiki/Settings>

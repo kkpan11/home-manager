@@ -10,37 +10,35 @@ let
     literalExpression
     mkIf
     mkOption
+    mkEnableOption
     optional
     types
     ;
 
   cfg = config.programs.fish;
 
-  pluginModule = types.submodule (
-    { config, ... }:
-    {
-      options = {
-        src = mkOption {
-          type = types.path;
-          description = ''
-            Path to the plugin folder.
+  pluginModule = types.submodule {
+    options = {
+      src = mkOption {
+        type = types.path;
+        description = ''
+          Path to the plugin folder.
 
-            Relevant pieces will be added to the fish function path and
-            the completion path. The {file}`init.fish` and
-            {file}`key_binding.fish` files are sourced if
-            they exist.
-          '';
-        };
-
-        name = mkOption {
-          type = types.str;
-          description = ''
-            The name of the plugin.
-          '';
-        };
+          Relevant pieces will be added to the fish function path and
+          the completion path. The {file}`init.fish` and
+          {file}`key_binding.fish` files are sourced if
+          they exist.
+        '';
       };
-    }
-  );
+
+      name = mkOption {
+        type = types.str;
+        description = ''
+          The name of the plugin.
+        '';
+      };
+    };
+  };
 
   functionModule = types.submodule {
     options = {
@@ -155,8 +153,27 @@ let
     };
   };
 
+  completionModule = types.submodule {
+    options = {
+      body = mkOption {
+        type = types.lines;
+        description = ''
+          The completion file's body.
+        '';
+      };
+    };
+  };
+
   abbrModule = types.submodule {
     options = {
+      name = mkOption {
+        type = with types; nullOr str;
+        default = null;
+        description = ''
+          The abbreviation name that is replaced by the expansion.
+        '';
+      };
+
       expansion = mkOption {
         type = with types; nullOr str;
         default = null;
@@ -200,7 +217,8 @@ let
         description = ''
           The marker indicates the position of the cursor when the abbreviation
           is expanded. When setCursor is true, the marker is set with a default
-          value of "%".
+          value of "%". This Nix option maps to fish's
+          {command}`abbr --set-cursor` flag in the generated configuration.
         '';
       };
 
@@ -214,25 +232,95 @@ let
     };
   };
 
+  bindModule = types.submodule (
+    { config, ... }:
+    {
+      options = {
+        name = mkOption {
+          type = with types; nullOr str;
+          default = null;
+          description = ''
+            The key name that is used for the bind.
+            If null, the attribute set key is used.
+          '';
+        };
+        enable = mkEnableOption "enable the bind. Set false if you want to ignore the bind" // {
+          default = true;
+        };
+        mode = mkOption {
+          description = "Specify the bind mode that the bind is used in";
+          type =
+            with types;
+            nullOr (
+              either (enum [
+                "default"
+                "insert"
+                "paste"
+              ]) str
+            );
+          default = null;
+        };
+        command = mkOption {
+          description = "command that will be execute";
+          type =
+            let
+              origin =
+                with types;
+                nullOr (oneOf [
+                  str
+                  (listOf str)
+                ]);
+            in
+            origin
+            // {
+              description = "string or list of string (optional when erase is set to true)";
+              check = x: if !config.erase && isNull x then false else origin.check x;
+            };
+          default = null;
+        };
+        setsMode = mkOption {
+          description = "Change current mode after bind is executed";
+          type =
+            with types;
+            nullOr (
+              either (enum [
+                "default"
+                "insert"
+                "paste"
+              ]) str
+            );
+          default = null;
+        };
+        erase = mkEnableOption "remove bind";
+        silent = mkEnableOption "Operate silently";
+        repaint = mkEnableOption "redraw prompt after command";
+        operate = mkOption {
+          description = "Operate on preset bindings or user bindings";
+          type =
+            with types;
+            nullOr (enum [
+              "preset"
+              "user"
+            ]);
+          default = null;
+        };
+      };
+    }
+  );
+
   abbrsStr = lib.concatStringsSep "\n" (
     lib.mapAttrsToList (
-      name: def:
+      attrName: def:
       let
+        name = if isAttrs def && def.name != null then def.name else attrName;
         mods =
-          lib.cli.toGNUCommandLineShell
-            {
-              mkOption =
-                k: v:
-                if v == null then
-                  [ ]
-                else if k == "set-cursor" then
-                  [ "--${k}=${lib.generators.mkValueStringDefault { } v}" ]
-                else
-                  [
-                    "--${k}"
-                    (lib.generators.mkValueStringDefault { } v)
-                  ];
-            }
+          lib.cli.toCommandLineShell
+            (optionName: {
+              option = "--${optionName}";
+              sep = if optionName == "set-cursor" then "=" else null;
+              explicitBool = false;
+              formatArg = lib.generators.mkValueStringDefault { };
+            })
             {
               inherit (def)
                 position
@@ -254,6 +342,59 @@ let
     lib.mapAttrsToList (k: v: "alias ${k} ${lib.escapeShellArg v}") cfg.shellAliases
   );
 
+  filteredBinds = lib.filterAttrs (_: { enable, ... }: enable) cfg.binds;
+
+  bindsStr = lib.concatStringsSep "\n" (
+    lib.flatten (
+      lib.mapAttrsToList (
+        k:
+        {
+          name,
+          silent,
+          erase,
+          repaint,
+          operate,
+          mode,
+          setsMode,
+          command,
+          ...
+        }:
+        let
+          key = if name != null then name else k;
+          opts =
+            lib.optionals silent [ "-s" ]
+            ++ lib.optionals (!isNull operate) [ "--${operate}" ]
+            ++ lib.optionals (!isNull mode) [
+              "--mode"
+              mode
+            ]
+            ++ lib.optionals (!isNull setsMode) [
+              "--sets-mode"
+              setsMode
+            ];
+
+          cmdNormal = lib.concatStringsSep " " (
+            [ "bind" ]
+            ++ opts
+            ++ [ key ]
+            ++ map lib.escapeShellArg (lib.flatten [ command ])
+            ++ lib.optional repaint "repaint"
+          );
+
+          cmdErase = lib.concatStringsSep "  " (
+            [
+              "bind"
+              "-e"
+            ]
+            ++ opts
+            ++ [ key ]
+          );
+        in
+        lib.optionals erase [ cmdErase ] ++ lib.optionals (!isNull command) [ cmdNormal ]
+      ) filteredBinds
+    )
+  );
+
   fishIndent =
     name: text:
     pkgs.runCommand name {
@@ -262,16 +403,34 @@ let
       passAsFile = [ "text" ];
     } "env HOME=$(mktemp -d) fish_indent < $textPath > $out";
 
-  translatedSessionVariables = pkgs.runCommandLocal "hm-session-vars.fish" { } ''
+  sessionVarsFile = "etc/profile.d/hm-session-vars.fish";
+  sessionVarsPkg = pkgs.runCommandLocal "hm-session-vars.fish" { } ''
+    mkdir -p "$(dirname $out/${sessionVarsFile})"
     (echo "function setup_hm_session_vars;"
     ${pkgs.buildPackages.babelfish}/bin/babelfish \
-    <${config.home.sessionVariablesPackage}/etc/profile.d/hm-session-vars.sh
+      <${config.home.sessionVariablesPackage}/etc/profile.d/hm-session-vars.sh
     echo "end"
-    echo "setup_hm_session_vars") > $out
+    echo "setup_hm_session_vars") > $out/${sessionVarsFile}
   '';
+  sourceHandlersStr =
+    let
+      handlerAttrs = [
+        "onJobExit"
+        "onProcessExit"
+        "onVariable"
+        "onSignal"
+        "onEvent"
+      ];
+      isHandler = _name: def: isAttrs def && builtins.any (attr: def.${attr} != null) handlerAttrs;
+      handlerFunctions = lib.filterAttrs isHandler cfg.functions;
+      sourceFunction = name: _def: "source ${config.xdg.configHome}/fish/functions/${name}.fish";
+    in
+    builtins.concatStringsSep "\n" (lib.mapAttrsToList sourceFunction handlerFunctions);
 
 in
 {
+  meta.maintainers = [ lib.maintainers.SunOfLife1 ];
+
   imports = [
     (lib.mkRemovedOptionModule [ "programs" "fish" "promptInit" ] ''
       Prompt is now configured through the
@@ -312,16 +471,14 @@ in
       shellAbbrs = mkOption {
         type = with types; attrsOf (either str abbrModule);
         default = { };
-        example = literalExpression ''
-          {
-            l = "less";
-            gco = "git checkout";
-            "-C" = {
-              position = "anywhere";
-              expansion = "--color";
-            };
-          }
-        '';
+        example = {
+          l = "less";
+          gco = "git checkout";
+          "-C" = {
+            position = "anywhere";
+            expansion = "--color";
+          };
+        };
         description = ''
           An attribute set that maps aliases (the top level attribute names
           in this option) to abbreviations. Abbreviations are expanded with
@@ -337,6 +494,21 @@ in
           If enabled, abbreviations will be preferred over aliases when
           other modules define aliases for fish.
         '';
+      };
+
+      binds = mkOption {
+        type = types.attrsOf bindModule;
+        default = { };
+        description = "Manage key bindings";
+        example =
+          lib.literalExpression # nix
+            ''
+              {
+                "alt-shift-b".command = "fish_commandline_append bat";
+                "alt-s".erase = true;
+                "alt-s".operate = "preset";
+              }
+            '';
       };
 
       shellInit = mkOption {
@@ -428,97 +600,152 @@ in
         <https://fishshell.com/docs/current/cmds/function.html>.
       '';
     };
+
+    programs.fish.completions = mkOption {
+      type = with types; attrsOf (either lines completionModule);
+      default = { };
+      example = literalExpression ''
+        {
+          my-prog = '''
+            complete -c myprog -s o -l output
+          ''';
+
+          my-app = {
+            body = '''
+              complete -c myapp -s -v
+            ''';
+          };
+        }
+      '';
+      description = ''
+        Custom fish completions. For more information see
+        <https://fishshell.com/docs/current/completions.html>.
+      '';
+    };
+
+    programs.fish.sessionVariablesPackage = mkOption {
+      type = types.package;
+      internal = true;
+      description = ''
+        The package containing the translated {file}`hm-session-vars.fish` file.
+      '';
+    };
   };
 
   config = mkIf cfg.enable (
     lib.mkMerge [
-      { home.packages = [ cfg.package ]; }
+      {
+        home.packages = [
+          cfg.package
+          cfg.sessionVariablesPackage
+        ];
+        programs.fish.sessionVariablesPackage = sessionVarsPkg;
+      }
 
-      (mkIf cfg.generateCompletions {
-        # Support completion for `man` by building a cache for `apropos`.
-        programs.man.generateCaches = lib.mkDefault true;
+      (mkIf cfg.generateCompletions (
+        let
+          generateCompletions =
+            let
+              getName =
+                attrs: attrs.name or "${attrs.pname or "«pname-missing»"}-${attrs.version or "«version-missing»"}";
+            in
+            package:
+            pkgs.runCommand "${getName package}-fish-completions"
+              {
+                srcs = [
+                  package
+                ]
+                ++ lib.filter (p: p != null) (
+                  map (outName: package.${outName} or null) config.home.extraOutputsToInstall
+                );
+                nativeBuildInputs = [
+                  pkgs.python3
+                  cfg.package
+                ];
+                preferLocalBuild = true;
+              }
+              ''
+                # The generator script is embedded in the fish binary, so extract it.
+                generator=$PWD/create_manpage_completions.py
+                fish --no-config -c 'status get-file tools/create_manpage_completions.py' > "$generator"
 
-        xdg.dataFile."fish/home-manager_generated_completions".source =
-          let
-            # Paths later in the list will overwrite those already linked
-            destructiveSymlinkJoin =
-              args_@{
-                name,
-                paths,
-                preferLocalBuild ? true,
-                allowSubstitutes ? false,
-                postBuild ? "",
-                ...
-              }:
-              let
-                args =
-                  removeAttrs args_ [
-                    "name"
-                    "postBuild"
-                  ]
-                  // {
-                    # pass the defaults
-                    inherit preferLocalBuild allowSubstitutes;
-                  };
-              in
-              pkgs.runCommand name args ''
                 mkdir -p $out
-                for i in $paths; do
-                  if [ -z "$(find $i -prune -empty)" ]; then
-                    cp -srf $i/* $out
+                for src in $srcs; do
+                  if [ -d $src/share/man ]; then
+                    find -L $src/share/man -type f -exec python "$generator" --directory $out {} + > /dev/null
                   fi
                 done
-                ${postBuild}
               '';
 
-            generateCompletions =
-              let
-                getName =
-                  attrs: attrs.name or "${attrs.pname or "«pname-missing»"}-${attrs.version or "«version-missing»"}";
-              in
-              package:
-              pkgs.runCommand "${getName package}-fish-completions"
-                {
-                  srcs =
-                    [ package ]
-                    ++ lib.filter (p: p != null) (
-                      builtins.map (outName: package.${outName} or null) config.home.extraOutputsToInstall
-                    );
-                  nativeBuildInputs = [ pkgs.python3 ];
-                  buildInputs = [ cfg.package ];
-                  preferLocalBuild = true;
-                }
-                ''
+          allCompletions =
+            let
+              cmp = (a: b: (a.meta.priority or 0) > (b.meta.priority or 0));
+            in
+            map generateCompletions (lib.sort cmp config.home.packages);
+        in
+        {
+          # Support completion for `man` by building a cache for `apropos`.
+          programs.man.generateCaches = lib.mkDefault true;
+
+          xdg.dataFile."fish/home-manager/generated_completions".source =
+            let
+              # Paths later in the list will overwrite those already linked
+              destructiveSymlinkJoin =
+                args_@{
+                  name,
+                  preferLocalBuild ? true,
+                  allowSubstitutes ? false,
+                  postBuild ? "",
+                  ...
+                }:
+                let
+                  args =
+                    removeAttrs args_ [
+                      "name"
+                      "postBuild"
+                    ]
+                    // {
+                      # pass the defaults
+                      inherit preferLocalBuild allowSubstitutes;
+                    };
+                in
+                pkgs.runCommand name args ''
                   mkdir -p $out
-                  for src in $srcs; do
-                    if [ -d $src/share/man ]; then
-                      find -L $src/share/man -type f \
-                        -exec python ${cfg.package}/share/fish/tools/create_manpage_completions.py --directory $out {} + \
-                        > /dev/null
+                  for i in $paths; do
+                    if [ -z "$(find $i -prune -empty)" ]; then
+                      cp -srf $i/* $out
                     fi
                   done
+                  ${postBuild}
                 '';
-          in
-          destructiveSymlinkJoin {
-            name = "${config.home.username}-fish-completions";
-            paths =
-              let
-                cmp = (a: b: (a.meta.priority or 0) > (b.meta.priority or 0));
-              in
-              map generateCompletions (lib.sort cmp config.home.packages);
-          };
 
-        programs.fish.interactiveShellInit = ''
-          # add completions generated by Home Manager to $fish_complete_path
-          begin
-            set -l joined (string join " " $fish_complete_path)
-            set -l prev_joined (string replace --regex "[^\s]*generated_completions.*" "" $joined)
-            set -l post_joined (string replace $prev_joined "" $joined)
-            set -l prev (string split " " (string trim $prev_joined))
-            set -l post (string split " " (string trim $post_joined))
-            set fish_complete_path $prev "${config.xdg.dataHome}/fish/home-manager_generated_completions" $post
-          end
-        '';
+            in
+            destructiveSymlinkJoin {
+              name = "${config.home.username}-fish-completions";
+              paths = allCompletions;
+            };
+
+          # For packages with no Fish completions, generateCompletions will build an empty directory,
+          # which means they will not be in our runtime closure. Force a dependency so these do not get
+          # constantly rebuilt.
+          home.extraDependencies = allCompletions;
+
+          programs.fish.interactiveShellInit = ''
+            # add completions generated by Home Manager to $fish_complete_path
+            begin
+              set -l joined (string join " " $fish_complete_path)
+              set -l prev_joined (string replace --regex "[^\s]*generated_completions.*" "" $joined)
+              set -l post_joined (string replace $prev_joined "" $joined)
+              set -l prev (string split " " (string trim $prev_joined))
+              set -l post (string split " " (string trim $post_joined))
+              set fish_complete_path $prev "${config.xdg.dataHome}/fish/home-manager/generated_completions" $post
+            end
+          '';
+        }
+      ))
+
+      (mkIf (filteredBinds != { }) {
+        programs.fish.functions.fish_user_key_bindings = bindsStr;
       })
 
       {
@@ -530,7 +757,10 @@ in
           set -q __fish_home_manager_config_sourced; and exit
           set -g __fish_home_manager_config_sourced 1
 
-          source ${translatedSessionVariables}
+          source ${cfg.sessionVariablesPackage}/${sessionVarsFile}
+
+          # Source handler functions
+          ${sourceHandlersStr}
 
           ${cfg.shellInit}
 
@@ -590,6 +820,20 @@ in
               '';
           };
         }) cfg.functions;
+      }
+      {
+        xdg.configFile = lib.mapAttrs' (name: def: {
+          name = "fish/completions/${name}.fish";
+          value = {
+            source =
+              let
+                body = if isAttrs def then def.body else def;
+              in
+              fishIndent "${name}.fish" ''
+                ${lib.strings.removeSuffix "\n" body}
+              '';
+          };
+        }) cfg.completions;
       }
 
       # Each plugin gets a corresponding conf.d/plugin-NAME.fish file to load

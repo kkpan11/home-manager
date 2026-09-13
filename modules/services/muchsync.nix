@@ -139,17 +139,17 @@ in
   meta.maintainers = with lib.maintainers; [ euxane ];
 
   options.services.muchsync = {
+    package = lib.mkPackageOption pkgs "muchsync" { };
+
     remotes = mkOption {
       type = with types; attrsOf (submodule syncOptions);
       default = { };
-      example = lib.literalExpression ''
-        {
-          server = {
-            frequency = "*:0/10";
-            remote.host = "server.tld";
-          };
-        }
-      '';
+      example = {
+        server = {
+          frequency = "*:0/10";
+          remote.host = "server.tld";
+        };
+      };
       description = ''
         Muchsync remotes to synchronise with.
       '';
@@ -190,7 +190,7 @@ in
               ''"NMBGIT=${config.home.sessionVariables.NMBGIT}"''
             ];
             ExecStart = lib.concatStringsSep " " (
-              [ "${pkgs.muchsync}/bin/muchsync" ]
+              [ (lib.getExe cfg.package) ]
               ++ [ "-s ${escapeShellArg remoteCfg.sshCommand}" ]
               ++ optional (!remoteCfg.upload) "--noup"
 

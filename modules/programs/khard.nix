@@ -14,7 +14,7 @@ let
   renderSettings =
     with lib.generators;
     toINI {
-      mkKeyValue = mkKeyValueDefault rec {
+      mkKeyValue = mkKeyValueDefault {
         mkValueString =
           v:
           if lib.isList v then
@@ -65,24 +65,38 @@ in
           <https://khard.readthedocs.io/en/latest/#configuration>
           for more information.
         '';
-        example = lib.literalExpression ''
-          {
-            general = {
-              default_action = "list";
-              editor = ["vim" "-i" "NONE"];
-            };
+        example = {
+          general = {
+            default_action = "list";
+            editor = [
+              "vim"
+              "-i"
+              "NONE"
+            ];
+          };
 
-            "contact table" = {
-              display = "formatted_name";
-              preferred_phone_number_type = ["pref" "cell" "home"];
-              preferred_email_address_type = ["pref" "work" "home"];
-            };
+          "contact table" = {
+            display = "formatted_name";
+            preferred_phone_number_type = [
+              "pref"
+              "cell"
+              "home"
+            ];
+            preferred_email_address_type = [
+              "pref"
+              "work"
+              "home"
+            ];
+          };
 
-            vcard = {
-              private_objects = ["Jabber" "Skype" "Twitter"];
-            };
-          }
-        '';
+          vcard = {
+            private_objects = [
+              "Jabber"
+              "Skype"
+              "Twitter"
+            ];
+          };
+        };
       };
     };
 
@@ -107,6 +121,26 @@ in
               default value will set the aforementioned path as a single vdir.
             '';
           };
+          options.khard.type = lib.mkOption {
+            type = types.enum [
+              "vdir"
+              "discover"
+            ];
+            default = "vdir";
+            description = ''
+              Either a single vdir located in [](#opt-accounts.contact.accounts._name_.local.path)
+              or multiple automatically discovered vdirs in
+              [](#opt-accounts.contact.accounts._name_.local.path)/[](#opt-accounts.contact.accounts._name_.khard.glob).
+            '';
+          };
+          options.khard.glob = lib.mkOption {
+            type = lib.types.str;
+            default = "*";
+            description = ''
+              The glob expansion to be searched for contacts when
+              type is set to discover.
+            '';
+          };
         }
       );
     };
@@ -117,25 +151,25 @@ in
 
     xdg.configFile."khard/khard.conf".text =
       let
-        makePath =
-          baseDir: subDir:
-          builtins.toString (
-            /.
-            + lib.concatStringsSep "/" [
-              baseDir
-              subDir
-            ]
-          );
         makeName = accName: abookName: accName + lib.optionalString (abookName != "") "-${abookName}";
         makeEntry = anAccount: anAbook: ''
           [[${makeName anAccount.name anAbook}]]
-          path = ${makePath anAccount.local.path anAbook}
+          path = ${anAccount.local.path}/${anAbook}
+        '';
+        makeDiscoverEntry = anAccount: ''
+          [[${makeName anAccount.name ""}]]
+          path = ${anAccount.local.path}/${anAccount.khard.glob}
+          type = discover
         '';
       in
       ''
         [addressbooks]
         ${lib.concatMapStringsSep "\n" (
-          acc: lib.concatMapStringsSep "\n" (makeEntry acc) acc.khard.addressbooks
+          acc:
+          if acc.khard.type == "discover" then
+            makeDiscoverEntry acc
+          else
+            lib.concatMapStringsSep "\n" (makeEntry acc) acc.khard.addressbooks
         ) (lib.attrValues accounts)}
 
         ${renderSettings cfg.settings}

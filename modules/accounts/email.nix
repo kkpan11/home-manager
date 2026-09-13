@@ -9,6 +9,7 @@ let
     ;
 
   cfg = config.accounts.email;
+  enabledAccounts = lib.filterAttrs (_n: v: v.enable) cfg.accounts;
 
   gpgModule = types.submodule {
     options = {
@@ -79,6 +80,18 @@ let
         default = "none";
         description = "Method to communicate the signature.";
       };
+
+      htmlFormat = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Whether Thunderbird should interpret {option}`text` as an HTML signature.
+
+          This maps to Thunderbird's `mail.identity.id_*.htmlSigFormat`
+          preference. The signature content itself is still written through
+          `mail.identity.id_*.htmlSigText`.
+        '';
+      };
     };
   };
 
@@ -96,7 +109,9 @@ let
         type = types.bool;
         default = false;
         description = ''
-          Whether to use STARTTLS.
+          Whether to use STARTTLS. This is discouraged and should be avoided if
+          possible. See <https://datatracker.ietf.org/doc/html/rfc8314> for
+          more.
         '';
       };
 
@@ -112,6 +127,28 @@ let
         '';
       };
     };
+  };
+
+  authenticationOption = mkOption {
+    type = types.nullOr (
+      types.either types.str (
+        types.enum [
+          "anonymous"
+          "apop"
+          "clear"
+          "cram_md5"
+          "digest_md5"
+          "gssapi"
+          "login"
+          "ntlm"
+          "plain"
+          "xoauth2"
+        ]
+      )
+    );
+    default = null;
+    example = "plain";
+    description = "The authentication mechanism.";
   };
 
   imapModule = types.submodule {
@@ -133,6 +170,8 @@ let
           `null` then the default port is used.
         '';
       };
+
+      authentication = authenticationOption;
 
       tls = mkOption {
         type = tlsModule;
@@ -194,6 +233,37 @@ let
         '';
       };
 
+      authentication = authenticationOption;
+
+      tls = mkOption {
+        type = tlsModule;
+        default = { };
+        description = ''
+          Configuration for secure connections.
+        '';
+      };
+    };
+  };
+
+  ewsModule = types.submodule {
+    options = {
+      host = mkOption {
+        type = types.str;
+        example = "ews.example.org";
+        description = ''
+          Hostname of EWS server.
+        '';
+      };
+      serviceDescriptionURL = mkOption {
+        type = types.str;
+        example = "https://ews.example.org/ews/exchange.asmx";
+        description = ''
+          URL to EWS service description.
+        '';
+      };
+
+      authentication = authenticationOption;
+
       tls = mkOption {
         type = tlsModule;
         default = { };
@@ -230,6 +300,81 @@ let
     }
   );
 
+  aliasSubmodule =
+    { accountConfig, ... }:
+    {
+      options = {
+        name = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = ''
+            Friendly name for this alias.
+          '';
+        };
+
+        realName = mkOption {
+          type = types.str;
+          example = "John Doe";
+          description = "Name displayed when sending mails.";
+        };
+
+        userName = mkOption {
+          type = types.nullOr types.str;
+          default = accountConfig.userName;
+          defaultText = lib.literalExpression ''
+            # Inherits account configuration
+            accountConfig.userName
+          '';
+          description = ''
+            The server username of this alias. This will be used as
+            the SMTP, IMAP, and JMAP user name.
+          '';
+        };
+
+        address = mkOption {
+          type = types.strMatching ".*@.*";
+          example = "john.doe@example.org";
+          description = "The email address of this identity.";
+        };
+
+        signature = mkOption {
+          type = types.nullOr signatureModule;
+          default = accountConfig.signature;
+          defaultText = lib.literalExpression ''
+            # Inherits account configuration
+            accountConfig.signature
+          '';
+          description = ''
+            Signature configuration.
+          '';
+        };
+
+        gpg = mkOption {
+          type = types.nullOr gpgModule;
+          default = accountConfig.gpg;
+          defaultText = lib.literalExpression ''
+            # Inherits account configuration
+            accountConfig.gpg
+          '';
+          description = ''
+            GPG configuration.
+          '';
+        };
+
+        smtp = mkOption {
+          type = types.nullOr smtpModule;
+          default = accountConfig.smtp;
+          defaultText = lib.literalExpression ''
+            # Inherits account configuration
+            accountConfig.smtp
+          '';
+          description = ''
+            The SMTP configuration to use for this alias.
+          '';
+        };
+      };
+    };
+
   mailAccountOpts =
     { name, config, ... }:
     {
@@ -252,15 +397,29 @@ let
           '';
         };
 
+        enable = mkOption {
+          type = types.bool;
+          default = true;
+          description = ''
+            Whether this account is enabled.  Potentially useful to allow
+            setting email configuration globally then enabling or disabling on
+            specific systems.
+          '';
+        };
+
         flavor = mkOption {
           type = types.enum [
-            "plain"
-            "gmail.com"
-            "runbox.com"
+            "davmail"
             "fastmail.com"
-            "yandex.com"
-            "outlook.office365.com"
+            "gmail.com"
+            "mailbox.org"
             "migadu.com"
+            "outlook.office365.com-ews"
+            "outlook.office365.com"
+            "plain"
+            "posteo.de"
+            "runbox.com"
+            "yandex.com"
           ];
           default = "plain";
           description = ''
@@ -290,19 +449,10 @@ let
           type = types.listOf (
             types.oneOf [
               (types.strMatching ".*@.*")
-              (types.submodule {
-                options = {
-                  realName = mkOption {
-                    type = types.str;
-                    example = "Jane Doe";
-                    description = "Name displayed when sending mails.";
-                  };
-                  address = mkOption {
-                    type = types.strMatching ".*@.*";
-                    example = "jane.doe@example.org";
-                    description = "The email address of this identity.";
-                  };
-                };
+              (types.submoduleWith {
+                modules = [ aliasSubmodule ];
+                specialArgs.accountConfig = config;
+                shorthandOnlyDefinesConfig = true;
               })
             ]
           );
@@ -416,6 +566,14 @@ let
           '';
         };
 
+        ews = mkOption {
+          type = types.nullOr ewsModule;
+          default = null;
+          description = ''
+            The EWS configuration to use for this account.
+          '';
+        };
+
         maildir = mkOption {
           type = types.nullOr maildirModule;
           defaultText = {
@@ -429,7 +587,7 @@ let
 
       config = lib.mkMerge [
         {
-          name = name;
+          inherit name;
           maildir = lib.mkOptionDefault { path = "${name}"; };
         }
 
@@ -468,6 +626,17 @@ let
           };
         })
 
+        (mkIf (config.flavor == "outlook.office365.com-ews") {
+          userName = mkDefault config.address;
+
+          ews = {
+            host = "outlook.office365.com";
+            serviceDescriptionURL = "https://outlook.office365.com/EWS/Exchange.asmx";
+            authentication = "xoauth2";
+            tls.enable = true;
+          };
+        })
+
         (mkIf (config.flavor == "fastmail.com") {
           userName = mkDefault config.address;
 
@@ -484,6 +653,19 @@ let
           jmap = {
             host = "fastmail.com";
             sessionUrl = "https://jmap.fastmail.com/.well-known/jmap";
+          };
+        })
+
+        (mkIf (config.flavor == "mailbox.org") {
+          userName = mkDefault config.address;
+          folders.inbox = mkDefault "INBOX";
+          imap = {
+            host = "imap.mailbox.org";
+            port = 993;
+          };
+          smtp = {
+            host = "smtp.mailbox.org";
+            port = 465;
           };
         })
 
@@ -515,6 +697,24 @@ let
           };
         })
 
+        (
+          let
+            tls.enable = true;
+            host = "posteo.de";
+          in
+          mkIf ("posteo.de" == config.flavor) {
+            userName = mkDefault config.address;
+            imap = {
+              inherit host tls;
+              port = 993;
+            };
+            smtp = {
+              inherit host tls;
+              port = 465;
+            };
+          }
+        )
+
         (mkIf (config.flavor == "runbox.com") {
           imap = {
             host = "mail.runbox.com";
@@ -524,6 +724,20 @@ let
           smtp = {
             host = "mail.runbox.com";
             port = if config.smtp.tls.useStartTls then 587 else 465;
+          };
+        })
+
+        (mkIf (config.flavor == "davmail") {
+          imap = {
+            host = "localhost";
+            port = 1143;
+            authentication = "login";
+          };
+          smtp = {
+            host = "localhost";
+            port = 1025;
+            tls.enable = false;
+            authentication = "plain";
           };
         })
       ];
@@ -562,11 +776,11 @@ in
     };
   };
 
-  config = mkIf (cfg.accounts != { }) {
+  config = mkIf (enabledAccounts != { }) {
     assertions = [
       (
         let
-          primaries = lib.catAttrs "name" (lib.filter (a: a.primary) (lib.attrValues cfg.accounts));
+          primaries = lib.catAttrs "name" (lib.filter (a: a.primary) (lib.attrValues enabledAccounts));
         in
         {
           assertion = lib.length primaries == 1;

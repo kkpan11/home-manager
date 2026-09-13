@@ -8,30 +8,74 @@ let
   inherit (lib)
     literalExpression
     mkIf
+    mkMerge
     mkOption
     types
     ;
 
   cfg = config.programs.zed-editor;
   jsonFormat = pkgs.formats.json { };
+  json5 = pkgs.python3Packages.toPythonApplication pkgs.python3Packages.json5;
+  impureConfigMerger = empty: jqOperation: path: staticSettings: ''
+    mkdir -p $(dirname ${lib.escapeShellArg path})
+    if [ ! -e ${lib.escapeShellArg path} ]; then
+      # No file? Create it
+      echo ${lib.escapeShellArg empty} > ${lib.escapeShellArg path}
+    fi
+    dynamic="$(${lib.getExe json5} --as-json ${lib.escapeShellArg path} 2>/dev/null || echo ${lib.escapeShellArg empty})"
+    static="$(cat ${lib.escapeShellArg staticSettings})"
+    config="$(${lib.getExe pkgs.jq} -n ${lib.escapeShellArg jqOperation} --argjson dynamic "$dynamic" --argjson static "$static")"
+    printf '%s\n' "$config" > ${lib.escapeShellArg path}
+    unset config
+  '';
+
+  transformedMcpServers = lib.optionalAttrs (cfg.enableMcpIntegration && config.programs.mcp.enable) (
+    lib.mapAttrs (
+      name: server:
+      # See:
+      #
+      # - https://zed.dev/docs/ai/mcp
+      # - https://github.com/zed-industries/zed/discussions/53780
+      # - https://github.com/zed-industries/zed/blob/v1.6.3/crates/project/src/project_settings.rs#L182
+      (lib.optionalAttrs (server.command != null) { args = [ ]; })
+      // (lib.hm.mcp.transformMcpServer {
+        inherit server;
+        extraTransforms = [
+          (lib.hm.mcp.wrapEnvFilesCommand { inherit pkgs name; })
+        ];
+      })
+    ) config.programs.mcp.servers
+  );
+
+  settingMcpServers = lib.attrByPath [ "context_servers" ] { } cfg.userSettings;
+  mergedMcpServers = transformedMcpServers // settingMcpServers;
 
   mergedSettings =
     cfg.userSettings
     // (lib.optionalAttrs (builtins.length cfg.extensions > 0) {
       # this part by @cmacrae
       auto_install_extensions = lib.genAttrs cfg.extensions (_: true);
+    })
+    // (lib.optionalAttrs (mergedMcpServers != { }) {
+      context_servers = mergedMcpServers;
     });
+
+  editorEnv = {
+    EDITOR = "${cfg.package.meta.mainProgram} --wait";
+    VISUAL = "${cfg.package.meta.mainProgram} --wait";
+  };
 in
 {
-  meta.maintainers = [ lib.hm.maintainers.libewa ];
+  meta.maintainers = [
+    lib.maintainers.alinnow
+    lib.maintainers.zh4ngx
+  ];
 
   options = {
-    # TODO: add vscode option parity (installing extensions, configuring
-    # keybinds with nix etc.)
     programs.zed-editor = {
       enable = lib.mkEnableOption "Zed, the high performance, multiplayer code editor from the creators of Atom and Tree-sitter";
 
-      package = lib.mkPackageOption pkgs "zed-editor" { };
+      package = lib.mkPackageOption pkgs "zed-editor" { nullable = true; };
 
       extraPackages = mkOption {
         type = with types; listOf package;
@@ -40,30 +84,64 @@ in
         description = "Extra packages available to Zed.";
       };
 
-      userSettings = mkOption {
-        type = jsonFormat.type;
-        default = { };
-        example = literalExpression ''
-          {
-            features = {
-              copilot = false;
-            };
-            telemetry = {
-              metrics = false;
-            };
-            vim_mode = false;
-            ui_font_size = 16;
-            buffer_font_size = 16;
-          }
+      mutableUserSettings = mkOption {
+        type = types.bool;
+        default = true;
+        example = false;
+        description = ''
+          Whether user settings (settings.json) can be updated by zed.
         '';
+      };
+
+      mutableUserKeymaps = mkOption {
+        type = types.bool;
+        default = true;
+        example = false;
+        description = ''
+          Whether user keymaps (keymap.json) can be updated by zed.
+        '';
+      };
+
+      mutableUserTasks = mkOption {
+        type = types.bool;
+        default = true;
+        example = false;
+        description = ''
+          Whether user tasks (tasks.json) can be updated by zed.
+        '';
+      };
+
+      mutableUserDebug = mkOption {
+        type = types.bool;
+        default = true;
+        example = false;
+        description = ''
+          Whether user debug configurations (debug.json) can be updated by zed.
+        '';
+      };
+
+      userSettings = mkOption {
+        inherit (jsonFormat) type;
+        default = { };
+        example = {
+          features = {
+            copilot = false;
+          };
+          telemetry = {
+            metrics = false;
+          };
+          vim_mode = false;
+          ui_font_size = 16;
+          buffer_font_size = 16;
+        };
         description = ''
           Configuration written to Zed's {file}`settings.json`.
         '';
       };
 
       userKeymaps = mkOption {
-        type = jsonFormat.type;
-        default = { };
+        inherit (jsonFormat) type;
+        default = [ ];
         example = literalExpression ''
           [
             {
@@ -79,12 +157,54 @@ in
         '';
       };
 
+      userTasks = mkOption {
+        inherit (jsonFormat) type;
+        default = [ ];
+        example = [
+          {
+            label = "Format Code";
+            command = "nix";
+            args = [
+              "fmt"
+              "$ZED_WORKTREE_ROOT"
+            ];
+          }
+        ];
+        description = ''
+          Configuration written to Zed's {file}`tasks.json`.
+
+          [List of tasks](https://zed.dev/docs/tasks) that can be run from the
+          command palette.
+        '';
+      };
+
+      userDebug = mkOption {
+        inherit (jsonFormat) type;
+        default = [ ];
+        example = [
+          {
+            label = "Go (Delve)";
+            adapter = "Delve";
+            program = "$ZED_FILE";
+            request = "launch";
+            mode = "debug";
+          }
+        ];
+        description = ''
+          Configuration written to Zed's {file}`debug.json`.
+
+          Global debug configurations for Zed's [Debugger](https://zed.dev/docs/debugger).
+        '';
+      };
+
       extensions = mkOption {
         type = types.listOf types.str;
         default = [ ];
-        example = literalExpression ''
-          [ "swift" "nix" "xy-zed" ]
-        '';
+        example = [
+          "swift"
+          "nix"
+          "xy-zed"
+        ];
         description = ''
           A list of the extensions Zed should install on startup.
           Use the name of a repository in the [extension list](https://github.com/zed-industries/extensions/tree/main/extensions).
@@ -106,6 +226,19 @@ in
         '';
       };
 
+      enableMcpIntegration = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Whether to integrate the MCP server config from
+          {option}`programs.mcp.servers` into
+          {option}`programs.zed-editor.userSettings.context_servers`.
+
+          Note: Settings defined in {option}`programs.zed-editor.userSettings.context_servers`
+          will take precedence over the generated MCP configuration.
+        '';
+      };
+
       themes = mkOption {
         description = ''
           Each theme is written to
@@ -124,11 +257,31 @@ in
         );
         default = { };
       };
+
+      defaultEditor = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Whether to set {command}`zeditor -w` as the default editor using the
+          {env}`EDITOR` and {env}`VISUAL` environment variables.
+        '';
+      };
     };
   };
 
   config = mkIf cfg.enable {
-    home.packages =
+    assertions = [
+      {
+        assertion = cfg.extraPackages != [ ] -> cfg.package != null;
+        message = "{option}programs.zed-editor.extraPackages requires non null {option}programs.zed-editor.package";
+      }
+      {
+        assertion = cfg.defaultEditor -> cfg.package != null;
+        message = "{option}programs.zed-editor.defaultEditor requires non null {option}programs.zed-editor.package";
+      }
+    ];
+
+    home.packages = mkIf (cfg.package != null) (
       if cfg.extraPackages != [ ] then
         [
           (pkgs.symlinkJoin {
@@ -137,52 +290,86 @@ in
             preferLocalBuild = true;
             nativeBuildInputs = [ pkgs.makeWrapper ];
             postBuild = ''
-              wrapProgram $out/bin/zeditor \
+              wrapProgram $out/bin/${cfg.package.meta.mainProgram or "zeditor"} \
                 --suffix PATH : ${lib.makeBinPath cfg.extraPackages}
             '';
           })
         ]
       else
-        [ cfg.package ];
+        [ cfg.package ]
+    );
 
     home.file = mkIf (cfg.installRemoteServer && (cfg.package ? remote_server)) (
       let
-        inherit (cfg.package) version remote_server;
-        binaryName = "zed-remote-server-stable-${version}";
+        inherit (cfg.package) remote_server;
+        binaryName = cfg.package.remoteServerExecutableName;
       in
       {
         ".zed_server/${binaryName}".source = lib.getExe' remote_server binaryName;
       }
     );
 
-    xdg.configFile =
-      lib.attrsets.unionOfDisjoint
-        {
-          "zed/settings.json" = (
-            mkIf (mergedSettings != { }) {
-              source = jsonFormat.generate "zed-user-settings" mergedSettings;
-            }
-          );
-
-          "zed/keymap.json" = (
-            mkIf (cfg.userKeymaps != { }) {
-              source = jsonFormat.generate "zed-user-keymaps" cfg.userKeymaps;
-            }
-          );
-        }
-        (
-          lib.mapAttrs' (
-            n: v:
-            lib.nameValuePair "zed/themes/${n}.json" {
-              source =
-                if lib.isString v then
-                  pkgs.writeText "zed-theme-${n}" v
-                else if builtins.isPath v || lib.isStorePath v then
-                  v
-                else
-                  jsonFormat.generate "zed-theme-${n}" v;
-            }
-          ) cfg.themes
+    home.activation = mkMerge [
+      (mkIf (cfg.mutableUserSettings && mergedSettings != { }) {
+        zedSettingsActivation = lib.hm.dag.entryAfter [ "linkGeneration" ] (
+          impureConfigMerger "{}" "$dynamic * $static" "${config.xdg.configHome}/zed/settings.json" (
+            jsonFormat.generate "zed-user-settings" mergedSettings
+          )
         );
+      })
+      (mkIf (cfg.mutableUserKeymaps && cfg.userKeymaps != [ ]) {
+        zedKeymapActivation = lib.hm.dag.entryAfter [ "linkGeneration" ] (
+          impureConfigMerger "[]"
+            "$dynamic + $static | group_by(.context) | map(reduce .[] as $item ({}; . * $item))"
+            "${config.xdg.configHome}/zed/keymap.json"
+            (jsonFormat.generate "zed-user-keymaps" cfg.userKeymaps)
+        );
+      })
+      (mkIf (cfg.mutableUserTasks && cfg.userTasks != [ ]) {
+        zedTasksActivation = lib.hm.dag.entryAfter [ "linkGeneration" ] (
+          impureConfigMerger "[]"
+            "$dynamic + $static | group_by(.label) | map(reduce .[] as $item ({}; . * $item))"
+            "${config.xdg.configHome}/zed/tasks.json"
+            (jsonFormat.generate "zed-user-tasks" cfg.userTasks)
+        );
+      })
+      (mkIf (cfg.mutableUserDebug && cfg.userDebug != [ ]) {
+        zedDebugActivation = lib.hm.dag.entryAfter [ "linkGeneration" ] (
+          impureConfigMerger "[]"
+            "$dynamic + $static | group_by(.label) | map(reduce .[] as $item ({}; . * $item))"
+            "${config.xdg.configHome}/zed/debug.json"
+            (jsonFormat.generate "zed-user-debug" cfg.userDebug)
+        );
+      })
+    ];
+
+    xdg.configFile = mkMerge [
+      (lib.mapAttrs' (
+        n: v:
+        lib.nameValuePair "zed/themes/${n}.json" {
+          source =
+            if lib.isString v then
+              pkgs.writeText "zed-theme-${n}" v
+            else if builtins.isPath v || lib.isStorePath v then
+              v
+            else
+              jsonFormat.generate "zed-theme-${n}" v;
+        }
+      ) cfg.themes)
+      (mkIf (!cfg.mutableUserSettings && mergedSettings != { }) {
+        "zed/settings.json".source = jsonFormat.generate "zed-user-settings" mergedSettings;
+      })
+      (mkIf (!cfg.mutableUserKeymaps && cfg.userKeymaps != [ ]) {
+        "zed/keymap.json".source = jsonFormat.generate "zed-user-keymaps" cfg.userKeymaps;
+      })
+      (mkIf (!cfg.mutableUserTasks && cfg.userTasks != [ ]) {
+        "zed/tasks.json".source = jsonFormat.generate "zed-user-tasks" cfg.userTasks;
+      })
+      (mkIf (!cfg.mutableUserDebug && cfg.userDebug != [ ]) {
+        "zed/debug.json".source = jsonFormat.generate "zed-user-debug" cfg.userDebug;
+      })
+    ];
+
+    home.sessionVariables = mkIf cfg.defaultEditor editorEnv;
   };
 }

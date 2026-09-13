@@ -19,12 +19,7 @@ in
   options.services.etesync-dav = {
     enable = lib.mkEnableOption "etesync-dav";
 
-    package = mkOption {
-      type = types.package;
-      default = pkgs.etesync-dav;
-      defaultText = "pkgs.etesync-dav";
-      description = "The etesync-dav derivation to use.";
-    };
+    package = lib.mkPackageOption pkgs "etesync-dav" { };
 
     serverUrl = mkOption {
       type = types.str;
@@ -40,12 +35,10 @@ in
         ]
       );
       default = { };
-      example = lib.literalExpression ''
-        {
-          ETESYNC_LISTEN_ADDRESS = "localhost";
-          ETESYNC_LISTEN_PORT = 37358;
-        }
-      '';
+      example = {
+        ETESYNC_LISTEN_ADDRESS = "localhost";
+        ETESYNC_LISTEN_PORT = 37358;
+      };
       description = ''
         Settings for etesync-dav, passed as environment variables.
       '';

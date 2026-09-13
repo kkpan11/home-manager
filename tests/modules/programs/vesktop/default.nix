@@ -1,1 +1,3 @@
-{ vesktop-basic-configuration = ./basic-configuration.nix; }
+{
+  vesktop-basic-configuration = ./basic-configuration.nix;
+}

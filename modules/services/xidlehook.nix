@@ -48,29 +48,22 @@ let
   '';
 in
 {
-  meta.maintainers = [
-    lib.maintainers.dschrempf
-    lib.hm.maintainers.bertof
+  meta.maintainers = with lib.maintainers; [
+    bertof
+    dschrempf
   ];
 
   options.services.xidlehook = {
     enable = mkEnableOption "xidlehook systemd service";
 
-    package = mkOption {
-      type = types.package;
-      default = pkgs.xidlehook;
-      defaultText = "pkgs.xidlehook";
-      description = "The package to use for xidlehook.";
-    };
+    package = lib.mkPackageOption pkgs "xidlehook" { };
 
     environment = mkOption {
       type = types.attrsOf types.str;
       default = { };
-      example = literalExpression ''
-        {
-          "primary-display" = "$(xrandr | awk '/ primary/{print $1}')";
-        }
-      '';
+      example = {
+        "primary-display" = "$(xrandr | awk '/ primary/{print $1}')";
+      };
       description = ''
         Extra environment variables to be exported in the script.
         These options are passed unescaped as `export name=value`.
@@ -172,7 +165,8 @@ in
       Service = {
         Type = if cfg.once then "oneshot" else "simple";
         ExecStart = "${script}";
-      } // lib.optionalAttrs (!cfg.once) { Restart = "always"; };
+      }
+      // lib.optionalAttrs (!cfg.once) { Restart = "always"; };
       Install.WantedBy = [ "graphical-session.target" ];
     };
   };

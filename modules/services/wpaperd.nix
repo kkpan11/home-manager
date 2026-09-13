@@ -11,7 +11,7 @@ let
   inherit (lib) mkRenamedOptionModule mkIf;
 in
 {
-  meta.maintainers = [ lib.hm.maintainers."3ulalia" ];
+  meta.maintainers = [ lib.hm.maintainers._3ulalia ];
 
   imports = [
     (
@@ -40,20 +40,18 @@ in
     package = lib.mkPackageOption pkgs "wpaperd" { nullable = true; };
 
     settings = lib.mkOption {
-      type = tomlFormat.type;
+      inherit (tomlFormat) type;
       default = { };
-      example = lib.literalExpression ''
-        {
-          eDP-1 = {
-            path = "/home/foo/Pictures/Wallpaper";
-            apply-shadow = true;
-          };
-          DP-2 = {
-            path = "/home/foo/Pictures/Anime";
-            sorting = "descending";
-          };
-        }
-      '';
+      example = {
+        eDP-1 = {
+          path = "/home/foo/Pictures/Wallpaper";
+          apply-shadow = true;
+        };
+        DP-2 = {
+          path = "/home/foo/Pictures/Anime";
+          sorting = "descending";
+        };
+      };
       description = ''
         Configuration written to
         {file}`$XDG_CONFIG_HOME/wpaperd/wallpaper.toml`.
@@ -86,7 +84,9 @@ in
         Description = "wpaperd";
         PartOf = [ config.wayland.systemd.target ];
         After = [ config.wayland.systemd.target ];
-        X-Restart-Triggers = [ "${config.xdg.configFile."wpaperd/wallpaper.toml".source}" ];
+        X-Restart-Triggers = lib.mkIf (cfg.settings != { }) [
+          "${config.xdg.configFile."wpaperd/wallpaper.toml".source}"
+        ];
       };
 
       Service = {

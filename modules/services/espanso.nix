@@ -10,7 +10,6 @@ let
     mkPackageOption
     mkEnableOption
     mkIf
-    maintainers
     literalExpression
     types
     mkRemovedOptionModule
@@ -39,6 +38,13 @@ let
   yaml = pkgs.formats.yaml { };
 in
 {
+  meta.maintainers = with lib.maintainers; [
+    bobvanderlinden
+    liyangau
+    n8henrie
+    phanirithvij
+  ];
+
   imports = [
     (mkRemovedOptionModule [
       "services"
@@ -46,23 +52,12 @@ in
       "settings"
     ] "Use services.espanso.configs and services.espanso.matches instead.")
   ];
-  meta.maintainers = [
-    maintainers.lucasew
-    maintainers.bobvanderlinden
-    lib.hm.maintainers.liyangau
-    maintainers.n8henrie
-    maintainers.phanirithvij
-  ];
+
   options = {
     services.espanso = {
       enable = mkEnableOption "Espanso: cross platform text expander in Rust";
 
-      package = mkOption {
-        type = types.package;
-        description = "Which espanso package to use";
-        default = pkgs.espanso;
-        defaultText = literalExpression "pkgs.espanso";
-      };
+      package = lib.mkPackageOption pkgs "espanso" { };
 
       package-wayland =
         mkPackageOption pkgs "espanso-wayland" {
@@ -88,7 +83,7 @@ in
       };
 
       configs = mkOption {
-        type = yaml.type;
+        inherit (yaml) type;
         default = {
           default = { };
         };
@@ -111,7 +106,7 @@ in
       };
 
       matches = mkOption {
-        type = yaml.type;
+        inherit (yaml) type;
         default = {
           default.matches = [ ];
         };
@@ -212,7 +207,7 @@ in
       enable = true;
       config = {
         ProgramArguments = [
-          "${cfg.package}/bin/espanso"
+          "${cfg.package}/Applications/Espanso.app/Contents/MacOS/espanso"
           "launcher"
         ];
         EnvironmentVariables.PATH = "${cfg.package}/bin:/usr/bin:/bin:/usr/sbin:/sbin";

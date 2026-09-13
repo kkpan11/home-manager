@@ -45,9 +45,16 @@ let
         ${allItemsToHTML (indentLevel + 1) directory.bookmarks}
         ${indent indentLevel}</DL><p>'';
 
+      separatorToHTML = indentLevel: "${indent indentLevel}<HR>";
+
       itemToHTMLOrRecurse =
         indentLevel: item:
-        if item ? "url" then bookmarkToHTML indentLevel item else directoryToHTML indentLevel item;
+        if item ? "url" then
+          bookmarkToHTML indentLevel item
+        else if item == "separator" then
+          separatorToHTML indentLevel
+        else
+          directoryToHTML indentLevel item;
 
       allItemsToHTML =
         indentLevel: bookmarks: lib.concatStringsSep "\n" (map (itemToHTMLOrRecurse indentLevel) bookmarks);
@@ -68,15 +75,21 @@ let
     '';
 in
 {
+  # We're currently looking for a maintainer who actively uses bookmarks!
+  meta.maintainers = with maintainers; [ kira-bruneau ];
+
   imports = [
     (pkgs.path + "/nixos/modules/misc/assertions.nix")
     (pkgs.path + "/nixos/modules/misc/meta.nix")
   ];
 
-  # We're currently looking for a maintainer who actively uses bookmarks!
-  meta.maintainers = with maintainers; [ kira-bruneau ];
-
   options = {
+    _legacySettings = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      visible = false;
+    };
+
     enable = mkOption {
       type = with types; bool;
       default = config.settings != [ ];
@@ -106,6 +119,7 @@ in
             name = "kernel.org";
             url = "https://www.kernel.org";
           }
+          "separator"
           {
             name = "Nix sites";
             toolbar = true;

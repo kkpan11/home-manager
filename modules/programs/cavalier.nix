@@ -15,7 +15,7 @@ let
 
 in
 {
-  meta.maintainers = [ lib.hm.maintainers.bricked ];
+  meta.maintainers = [ lib.maintainers.bricked ];
 
   options.programs.cavalier = {
     enable = lib.mkEnableOption "Cava audio visualizer GUI";
@@ -24,7 +24,7 @@ in
 
     settings = {
       general = mkOption {
-        type = jsonFmt.type;
+        inherit (jsonFmt) type;
         default = { };
         example = lib.literalExpression ''
           {
@@ -57,7 +57,7 @@ in
       };
 
       cava = mkOption {
-        type = iniFmt.type;
+        inherit (iniFmt) type;
         default = { };
         example = lib.literalExpression ''
           {

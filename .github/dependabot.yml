@@ -7,19 +7,24 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "ci:"
-
   - package-ecosystem: "github-actions"
     directory: "/"
-    target-branch: "release-24.05"
+    target-branch: "release-26.05"
     schedule:
       interval: "weekly"
     commit-message:
       prefix: "ci:"
-
-  - package-ecosystem: "github-actions"
+  - package-ecosystem: "nix"
     directory: "/"
-    target-branch: "release-24.11"
+    target-branch: "master"
     schedule:
       interval: "weekly"
     commit-message:
-      prefix: "ci:"
+      prefix: "flake:"
+  - package-ecosystem: "nix"
+    directory: "/"
+    target-branch: "release-26.05"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "flake:"

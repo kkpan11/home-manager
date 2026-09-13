@@ -16,7 +16,6 @@ let
   cfg = config.programs.mpvpaper;
 in
 {
-  meta.maintainers = with lib.hm.maintainers; [ aguirre-matteo ];
 
   options.programs.mpvpaper = {
     enable = mkEnableOption "mpvpaper";
@@ -31,7 +30,7 @@ in
       '';
       description = ''
         List of program names that will cause mpvpaper to pause.
-        Programs must be separed by spaces or newlines.
+        Programs must be separated by spaces or newlines.
       '';
     };
     stopList = mkOption {
@@ -44,7 +43,7 @@ in
       '';
       description = ''
         List of program names that will cause mpvpaper to stop.
-        Programs must be separed by spaces or newlines.
+        Programs must be separated by spaces or newlines.
       '';
     };
   };
@@ -55,7 +54,11 @@ in
     ];
 
     home.packages = mkIf (cfg.package != null) [ cfg.package ];
-    xdg.configFile."mpvpaper/pauselist".text = mkIf (cfg.pauseList != "") cfg.pauseList;
-    xdg.configFile."mpvpaper/stoplist".text = mkIf (cfg.stopList != "") cfg.stopList;
+    xdg.configFile."mpvpaper/pauselist" = mkIf (cfg.pauseList != "") {
+      text = cfg.pauseList;
+    };
+    xdg.configFile."mpvpaper/stoplist" = mkIf (cfg.stopList != "") {
+      text = cfg.stopList;
+    };
   };
 }

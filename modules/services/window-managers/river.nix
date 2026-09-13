@@ -71,7 +71,7 @@ in
   options.wayland.windowManager.river = {
     enable = lib.mkEnableOption "the river window manager";
 
-    package = lib.mkPackageOption pkgs "river" {
+    package = lib.mkPackageOption pkgs "river-classic" {
       nullable = true;
       extraDescription = ''
         Set to `null` to not add any river package to your path.
@@ -201,8 +201,7 @@ in
     ];
 
     home.packages =
-      lib.optional (cfg.package != null) cfg.package
-      ++ lib.optional cfg.xwayland.enable pkgs.xwayland;
+      lib.optional (cfg.package != null) cfg.package ++ lib.optional cfg.xwayland.enable pkgs.xwayland;
 
     # Configuration file ~/.config/river/init
     xdg.configFile."river/init".source = pkgs.writeShellScript "init" (

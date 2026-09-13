@@ -1,6 +1,6 @@
 # Home Manager Manual {#home-manager-manual}
 
-## Version 25.05 (unstable)
+## Version 26.11 (unstable)
 
 
 ```{=include=} preface
@@ -14,6 +14,7 @@ usage.md
 nix-flakes.md
 writing-modules.md
 contributing.md
+internals.md
 3rd-party.md
 faq.md
 ```

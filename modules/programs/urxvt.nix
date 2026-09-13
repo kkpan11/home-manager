@@ -26,12 +26,10 @@ in
       type = types.attrsOf types.str;
       default = { };
       description = "Mapping of keybindings to actions";
-      example = lib.literalExpression ''
-        {
-          "Shift-Control-C" = "eval:selection_to_clipboard";
-          "Shift-Control-V" = "eval:paste_clipboard";
-        }
-      '';
+      example = {
+        "Shift-Control-C" = "eval:selection_to_clipboard";
+        "Shift-Control-V" = "eval:paste_clipboard";
+      };
     };
 
     iso14755 = mkOption {
@@ -142,27 +140,26 @@ in
   config = lib.mkIf cfg.enable {
     home.packages = [ cfg.package ];
 
-    xresources.properties =
-      {
-        "URxvt.scrollBar" = cfg.scroll.bar.enable;
-        "URxvt.scrollstyle" = cfg.scroll.bar.style;
-        "URxvt.scrollBar_align" = cfg.scroll.bar.align;
-        "URxvt.scrollBar_right" = cfg.scroll.bar.position == "right";
-        "URxvt.scrollBar_floating" = cfg.scroll.bar.floating;
-        "URxvt.saveLines" = cfg.scroll.lines;
-        "URxvt.scrollWithBuffer" = cfg.scroll.keepPosition;
-        "URxvt.scrollTtyKeypress" = cfg.scroll.scrollOnKeystroke;
-        "URxvt.scrollTtyOutput" = cfg.scroll.scrollOnOutput;
-        "URxvt.transparent" = cfg.transparent;
-        "URxvt.shading" = cfg.shading;
-        "URxvt.iso14755" = cfg.iso14755;
-      }
-      // lib.flip lib.mapAttrs' cfg.keybindings (
-        kb: action: lib.nameValuePair "URxvt.keysym.${kb}" action
-      )
-      // lib.optionalAttrs (cfg.fonts != [ ]) {
-        "URxvt.font" = lib.concatStringsSep "," cfg.fonts;
-      }
-      // lib.flip lib.mapAttrs' cfg.extraConfig (k: v: lib.nameValuePair "URxvt.${k}" v);
+    xresources.properties = {
+      "URxvt.scrollBar" = cfg.scroll.bar.enable;
+      "URxvt.scrollstyle" = cfg.scroll.bar.style;
+      "URxvt.scrollBar_align" = cfg.scroll.bar.align;
+      "URxvt.scrollBar_right" = cfg.scroll.bar.position == "right";
+      "URxvt.scrollBar_floating" = cfg.scroll.bar.floating;
+      "URxvt.saveLines" = cfg.scroll.lines;
+      "URxvt.scrollWithBuffer" = cfg.scroll.keepPosition;
+      "URxvt.scrollTtyKeypress" = cfg.scroll.scrollOnKeystroke;
+      "URxvt.scrollTtyOutput" = cfg.scroll.scrollOnOutput;
+      "URxvt.transparent" = cfg.transparent;
+      "URxvt.shading" = cfg.shading;
+      "URxvt.iso14755" = cfg.iso14755;
+    }
+    // lib.flip lib.mapAttrs' cfg.keybindings (
+      kb: action: lib.nameValuePair "URxvt.keysym.${kb}" action
+    )
+    // lib.optionalAttrs (cfg.fonts != [ ]) {
+      "URxvt.font" = lib.concatStringsSep "," cfg.fonts;
+    }
+    // lib.flip lib.mapAttrs' cfg.extraConfig (k: v: lib.nameValuePair "URxvt.${k}" v);
   };
 }

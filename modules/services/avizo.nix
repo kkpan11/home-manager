@@ -15,34 +15,28 @@ in
     enable = lib.mkEnableOption "avizo, a simple notification daemon";
 
     settings = lib.mkOption {
-      type = (pkgs.formats.ini { }).type;
+      inherit ((pkgs.formats.ini { })) type;
       default = { };
-      example = lib.literalExpression ''
-        {
-          default = {
-            time = 1.0;
-            y-offset = 0.5;
-            fade-in = 0.1;
-            fade-out = 0.2;
-            padding = 10;
-          };
-        }
-      '';
+      example = {
+        default = {
+          time = 1.0;
+          y-offset = 0.5;
+          fade-in = 0.1;
+          fade-out = 0.2;
+          padding = 10;
+        };
+      };
       description = ''
         The settings that will be written to the avizo configuration file.
       '';
     };
 
-    package = lib.mkOption {
-      type = lib.types.package;
-      default = pkgs.avizo;
-      defaultText = lib.literalExpression "pkgs.avizo";
-      example = lib.literalExpression ''
+    package = lib.mkPackageOption pkgs "avizo" {
+      example = ''
         pkgs.avizo.overrideAttrs (final: prev: {
           patchPhase = "cp ''${./images}/*.png data/images/";
         })
       '';
-      description = "The `avizo` package to use.";
     };
   };
 

@@ -42,6 +42,16 @@ let
           batch = "true";
           log = "false"; # don't log to file, handled by systemd
         };
+        defaultText = lib.literalExpression ''
+          {
+            repeat = "watch";
+            sshcmd = "''${pkgs.openssh}/bin/ssh";
+            ui = "text";
+            auto = "true";
+            batch = "true";
+            log = "false"; # don't log to file, handled by systemd
+          }
+        '';
         description = ''
           Additional command line options as a dictionary to pass to the
           `unison` program.
@@ -134,7 +144,7 @@ in
     );
 
     systemd.user.timers = makeDefs (
-      name: pairCfg: {
+      name: _pairCfg: {
         Unit.Description = "Unison pair sync auto-restart (${name})";
         Install.WantedBy = [ "timers.target" ];
         Timer = {

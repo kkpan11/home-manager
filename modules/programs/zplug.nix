@@ -9,29 +9,26 @@ let
 
   cfg = config.programs.zsh.zplug;
 
-  pluginModule = types.submodule (
-    { config, ... }:
-    {
-      options = {
-        name = mkOption {
-          type = types.str;
-          description = "The name of the plugin.";
-        };
-
-        tags = mkOption {
-          type = types.listOf types.str;
-          default = [ ];
-          description = "The plugin tags.";
-        };
+  pluginModule = types.submodule {
+    options = {
+      name = mkOption {
+        type = types.str;
+        description = "The name of the plugin.";
       };
 
-    }
-  );
-
+      tags = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        description = "The plugin tags.";
+      };
+    };
+  };
 in
 {
   options.programs.zsh.zplug = {
     enable = lib.mkEnableOption "zplug - a zsh plugin manager";
+
+    package = lib.mkPackageOption pkgs "zplug" { };
 
     plugins = mkOption {
       default = [ ];
@@ -49,12 +46,12 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    home.packages = [ pkgs.zplug ];
+    home.packages = [ cfg.package ];
 
     programs.zsh.initContent = lib.mkOrder 550 ''
       export ZPLUG_HOME=${cfg.zplugHome}
 
-      source ${pkgs.zplug}/share/zplug/init.zsh
+      source ${cfg.package}/share/zplug/init.zsh
 
       ${optionalString (cfg.plugins != [ ]) ''
         ${lib.concatStrings (

@@ -5,27 +5,27 @@
   ...
 }:
 let
+  inherit (lib) mkIf;
+
   cfg = config.programs.ncspot;
 
   tomlFormat = pkgs.formats.toml { };
 in
 {
-  meta.maintainers = [ ];
+  meta.maintainers = [ lib.maintainers.da157 ];
 
   options.programs.ncspot = {
     enable = lib.mkEnableOption "ncspot";
 
-    package = lib.mkPackageOption pkgs "ncspot" { };
+    package = lib.mkPackageOption pkgs "ncspot" { nullable = true; };
 
     settings = lib.mkOption {
-      type = tomlFormat.type;
+      inherit (tomlFormat) type;
       default = { };
-      example = lib.literalExpression ''
-        {
-          shuffle = true;
-          gapless = true;
-        }
-      '';
+      example = {
+        shuffle = true;
+        gapless = true;
+      };
       description = ''
         Configuration written to
         {file}`$XDG_CONFIG_HOME/ncspot/config.toml`.
@@ -36,10 +36,10 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    home.packages = [ cfg.package ];
+  config = mkIf cfg.enable {
+    home.packages = mkIf (cfg.package != null) [ cfg.package ];
 
-    xdg.configFile."ncspot/config.toml" = lib.mkIf (cfg.settings != { }) {
+    xdg.configFile."ncspot/config.toml" = mkIf (cfg.settings != { }) {
       source = tomlFormat.generate "ncspot-config" cfg.settings;
     };
   };

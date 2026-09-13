@@ -1,6 +1,6 @@
 { pkgs, lib }:
 let
-  inherit (lib) literalExpression mkOption types;
+  inherit (lib) mkOption types;
 
   primitive =
     with types;
@@ -182,12 +182,8 @@ in
   xsession.windowManager.bspwm = {
     enable = lib.mkEnableOption "bspwm window manager";
 
-    package = mkOption {
-      type = types.package;
-      default = pkgs.bspwm;
-      defaultText = literalExpression "pkgs.bspwm";
-      description = "The bspwm package to use.";
-      example = literalExpression "pkgs.bspwm-unstable";
+    package = lib.mkPackageOption pkgs "bspwm" {
+      example = "pkgs.bspwm-unstable";
     };
 
     settings = mkOption {
@@ -247,21 +243,19 @@ in
       type = types.attrsOf rule;
       default = { };
       description = "Rule configuration. The keys of the attribute set are the targets of the rules.";
-      example = literalExpression ''
-        {
-          "Gimp" = {
-            desktop = "^8";
-            state = "floating";
-            follow = true;
-          };
-          "Kupfer.py" = {
-            focus = true;
-          };
-          "Screenkey" = {
-            manage = false;
-          };
-        }
-      '';
+      example = {
+        "Gimp" = {
+          desktop = "^8";
+          state = "floating";
+          follow = true;
+        };
+        "Kupfer.py" = {
+          focus = true;
+        };
+        "Screenkey" = {
+          manage = false;
+        };
+      };
     };
 
     startupPrograms = mkOption {

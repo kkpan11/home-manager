@@ -1,5 +1,10 @@
 modulePath:
-{ config, lib, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
 
@@ -31,17 +36,25 @@ in
       };
     }
     // {
-      nmt.script = ''
-        assertFileRegex \
-          home-path/bin/${cfg.wrappedPackageName} \
-          MOZ_APP_LAUNCHER
+      nmt.script =
+        let
+          binPath =
+            if pkgs.stdenv.hostPlatform.isDarwin then
+              "Applications/${cfg.darwinAppName}.app/Contents/MacOS"
+            else
+              "bin";
+        in
+        ''
+          assertFileRegex \
+            "home-path/${binPath}/${cfg.finalPackage.meta.mainProgram}" \
+            MOZ_APP_LAUNCHER
 
-        assertDirectoryExists home-files/${cfg.configPath}/basic
+          assertDirectoryExists "home-files/${cfg.profilesPath}/basic"
 
-        assertFileContent \
-          home-files/${cfg.configPath}/test/user.js \
-          ${./expected-user.js}
-      '';
+          assertFileContent \
+            "home-files/${cfg.profilesPath}/test/user.js" \
+            ${./expected-user.js}
+        '';
     }
   );
 }

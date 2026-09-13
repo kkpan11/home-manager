@@ -9,13 +9,13 @@ let
   cfg = config.programs.nix-init;
 in
 {
-  meta.maintainers = [ lib.maintainers.awwpotato ];
+  meta.maintainers = [ lib.maintainers.da157 ];
 
   options.programs.nix-init = {
     enable = lib.mkEnableOption "nix-init";
     package = lib.mkPackageOption pkgs "nix-init" { nullable = true; };
     settings = lib.mkOption {
-      type = tomlFormat.type;
+      inherit (tomlFormat) type;
       default = { };
       example = lib.literalExpression ''
         {
@@ -25,8 +25,8 @@ in
           nixpkgs = "<nixpkgs>";
           commit = true;
           access-tokens = {
-            github.com = "ghp_blahblahblah...";
-            gitlab.com = {
+            "github.com" = "ghp_blahblahblah...";
+            "gitlab.com" = {
               command = [
                 "secret-tool"
                 "or"
@@ -35,7 +35,7 @@ in
                 "use"
               ];
             };
-            gitlab.gnome.org = {
+            "gitlab.gnome.org" = {
               file = "/path/to/api/token";
             };
           };

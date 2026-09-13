@@ -22,12 +22,7 @@ in
         fnott, a lightweight Wayland notification daemon for wlroots-based compositors
       '';
 
-      package = mkOption {
-        type = types.package;
-        default = pkgs.fnott;
-        defaultText = lib.literalExpression "pkgs.fnott";
-        description = "Package providing {command}`fnott`.";
-      };
+      package = lib.mkPackageOption pkgs "fnott" { };
 
       extraFlags = mkOption {
         type = types.listOf types.str;
@@ -56,7 +51,7 @@ in
       };
 
       settings = mkOption {
-        type = iniFormat.type;
+        inherit (iniFormat) type;
         default = { };
         description = ''
           Configuration written to
@@ -66,19 +61,17 @@ in
           {manpage}`fnott.ini(5)` for a list of available options and <https://codeberg.org/dnkl/fnott/src/branch/master/fnott.ini>
           for an example configuration.
         '';
-        example = lib.literalExpression ''
-          {
-            main = {
-              notification-margin = 5;
-            };
+        example = {
+          main = {
+            notification-margin = 5;
+          };
 
-            low = {
-              timeout = 5;
-              title-font = "Dina:weight=bold:slant=italic";
-              title-color = "ffffff";
-            };
-          }
-        '';
+          low = {
+            timeout = 5;
+            title-font = "Dina:weight=bold:slant=italic";
+            title-color = "ffffff";
+          };
+        };
       };
     };
   };

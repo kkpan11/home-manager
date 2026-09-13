@@ -1,5 +1,10 @@
 modulePath:
-{ config, lib, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 let
   cfg = lib.getAttrFromPath modulePath config;
 
@@ -12,13 +17,24 @@ in
     {
       home.stateVersion = "19.09";
     }
-    // lib.setAttrByPath modulePath { enable = true; }
+    // lib.setAttrByPath modulePath {
+      enable = true;
+      configPath = ".mozilla/firefox";
+    }
     // {
-      nmt.script = ''
-        assertFileRegex \
-          home-path/bin/${cfg.wrappedPackageName} \
-          MOZ_APP_LAUNCHER
-      '';
+      nmt.script =
+        let
+          binPath =
+            if pkgs.stdenv.hostPlatform.isDarwin then
+              "Applications/${cfg.darwinAppName}.app/Contents/MacOS"
+            else
+              "bin";
+        in
+        ''
+          assertFileRegex \
+            "home-path/${binPath}/${cfg.finalPackage.meta.mainProgram}" \
+            MOZ_APP_LAUNCHER
+        '';
     }
   );
 }

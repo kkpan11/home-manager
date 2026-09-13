@@ -38,18 +38,24 @@ let
     }:
     name: value: "${name}${sep}${mkValueString value}${end}";
 
+  isSection = value: isAttrs value && (value._type or "") != "literal";
+
+  toRasiKeyValue =
+    attrs:
+    lib.concatStringsSep "\n" (
+      lib.mapAttrsToList (
+        name: value:
+        if isSection value then
+          "${name} {\n${toRasiKeyValue (filterAttrs (_: v: v != null) value)}\n}"
+        else
+          mkKeyValue { } name value
+      ) (filterAttrs (_: v: v != null) attrs)
+    );
+
   mkRasiSection =
     name: value:
-    if isAttrs value then
-      let
-        toRasiKeyValue = lib.generators.toKeyValue { mkKeyValue = mkKeyValue { }; };
-        # Remove null values so the resulting config does not have empty lines
-        configStr = toRasiKeyValue (filterAttrs (_: v: v != null) value);
-      in
-      ''
-        ${name} {
-        ${configStr}}
-      ''
+    if isSection value then
+      "${name} {\n${toRasiKeyValue value}\n}\n"
     else
       (mkKeyValue {
         sep = " ";
@@ -82,7 +88,7 @@ let
     left = 8;
   };
 
-  primitive =
+  configValueType =
     with types;
     (oneOf [
       str
@@ -91,8 +97,14 @@ let
       rasiLiteral
     ]);
 
+  sectionType = with types; attrsOf (either configValueType (listOf configValueType));
+
   # Either a `section { foo: "bar"; }` or a `@import/@theme "some-text"`
-  configType = with types; (either (attrsOf (either primitive (listOf primitive))) str);
+  configType = with types; either sectionType str;
+
+  extraConfigType =
+    with types;
+    attrsOf (either sectionType (either configValueType (listOf configValueType)));
 
   rasiLiteral =
     types.submodule {
@@ -132,8 +144,11 @@ let
     else
       cfg.theme;
 
+  modes = map (mode: if isString mode then mode else "${mode.name}:${mode.path}") cfg.modes;
 in
 {
+  meta.maintainers = [ ];
+
   options.programs.rofi = {
     enable = lib.mkEnableOption "Rofi: A window switcher, application launcher and dmenu replacement";
 
@@ -250,20 +265,52 @@ in
     configPath = mkOption {
       default = "${config.xdg.configHome}/rofi/config.rasi";
       defaultText = "$XDG_CONFIG_HOME/rofi/config.rasi";
-      type = types.str;
+      type = types.nonEmptyStr;
       description = "Path where to put generated configuration file.";
+    };
+
+    modes = mkOption {
+      default = [ ];
+      example = literalExpression ''
+        [
+          "drun"
+          "emoji"
+          "ssh"
+          {
+            name = "whatnot";
+            path = lib.getExe pkgs.rofi-whatnot;
+          }
+        ]
+      '';
+      type =
+        with types;
+        listOf (
+          either str (submodule {
+            options = {
+              name = mkOption {
+                type = str;
+                description = "Name used to reference the custom mode in the mode list.";
+              };
+              path = mkOption {
+                type = str;
+                description = "Executable path for the custom rofi script mode.";
+              };
+            };
+          })
+        );
+      description = "Modes to enable. For custom modes see `man 5 rofi-script`.";
     };
 
     extraConfig = mkOption {
       default = { };
-      example = literalExpression ''
-        {
-          modi = "drun,emoji,ssh";
-          kb-primary-paste = "Control+V,Shift+Insert";
-          kb-secondary-paste = "Control+v,Insert";
-        }
-      '';
-      type = configType;
+      example = {
+        kb-primary-paste = "Control+V,Shift+Insert";
+        kb-secondary-paste = "Control+v,Insert";
+        "run,drun" = {
+          display-name = "open:";
+        };
+      };
+      type = extraConfigType;
       description = "Additional configuration to add.";
     };
 
@@ -313,17 +360,21 @@ in
       toRasi {
         configuration = (
           {
-            font = cfg.font;
-            terminal = cfg.terminal;
-            cycle = cfg.cycle;
+            inherit (cfg)
+              cycle
+              font
+              terminal
+              xoffset
+              yoffset
+              ;
             location = (lib.getAttr cfg.location locationsMap);
-            xoffset = cfg.xoffset;
-            yoffset = cfg.yoffset;
           }
+          // lib.optionalAttrs (modes != [ ]) { inherit modes; }
           // cfg.extraConfig
         );
-        # @theme must go after configuration but attrs are output in alphabetical order ('@' first)
       }
+      # @theme must go after configuration but attrs are output in alphabetical order ('@' first)
+
       + (lib.optionalString (themeName != null) (toRasi {
         "@theme" = themeName;
       }));
@@ -339,6 +390,4 @@ in
         }
     );
   };
-
-  meta.maintainers = with lib.maintainers; [ ];
 }

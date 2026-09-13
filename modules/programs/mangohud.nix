@@ -31,7 +31,7 @@ let
       path = int;
       bool = "0"; # "on/off" opts are disabled with `=0`
       string = option;
-      list = lib.concatStringsSep "," (lib.lists.forEach option (x: toString x));
+      list = lib.concatStringsSep "," (lib.lists.forEach option toString);
     }
     .${builtins.typeOf option};
 
@@ -41,6 +41,8 @@ let
 
 in
 {
+  meta.maintainers = with lib.maintainers; [ zeratax ];
+
   options = {
     programs.mangohud = {
       enable = lib.mkEnableOption "Mangohud";
@@ -76,13 +78,11 @@ in
       settingsPerApplication = mkOption {
         type = with types; attrsOf (attrsOf settingsType);
         default = { };
-        example = lib.literalExpression ''
-          {
-            mpv = {
-              no_display = true;
-            };
-          }
-        '';
+        example = {
+          mpv = {
+            no_display = true;
+          };
+        };
         description = ''
           Sets MangoHud settings per application.
           Configuration written to
@@ -106,14 +106,11 @@ in
       MANGOHUD_DLSYM = 1;
     };
 
-    xdg.configFile =
-      {
-        "MangoHud/MangoHud.conf" = mkIf (cfg.settings != { }) { text = renderSettings cfg.settings; };
-      }
-      // lib.mapAttrs' (
-        n: v: lib.nameValuePair "MangoHud/${n}.conf" { text = renderSettings v; }
-      ) cfg.settingsPerApplication;
+    xdg.configFile = {
+      "MangoHud/MangoHud.conf" = mkIf (cfg.settings != { }) { text = renderSettings cfg.settings; };
+    }
+    // lib.mapAttrs' (
+      n: v: lib.nameValuePair "MangoHud/${n}.conf" { text = renderSettings v; }
+    ) cfg.settingsPerApplication;
   };
-
-  meta.maintainers = with lib.maintainers; [ zeratax ];
 }

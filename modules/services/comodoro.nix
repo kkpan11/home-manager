@@ -15,7 +15,7 @@ let
 
 in
 {
-  meta.maintainers = with lib.hm.maintainers; [ soywod ];
+  meta.maintainers = with lib.maintainers; [ soywod ];
 
   options.services.comodoro = {
     enable = lib.mkEnableOption "Comodoro server";
@@ -25,11 +25,9 @@ in
     environment = lib.mkOption {
       type = with lib.types; attrsOf str;
       default = { };
-      example = lib.literalExpression ''
-        {
-          "PASSWORD_STORE_DIR" = "~/.password-store";
-        }
-      '';
+      example = {
+        "PASSWORD_STORE_DIR" = "~/.password-store";
+      };
       description = ''
         Extra environment variables to be exported in the service.
       '';

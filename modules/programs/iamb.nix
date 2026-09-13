@@ -7,6 +7,11 @@
 let
   cfg = config.programs.iamb;
   tomlFormat = pkgs.formats.toml { };
+  configDir =
+    if pkgs.stdenv.hostPlatform.isDarwin && !config.xdg.enable then
+      "Library/Application Support"
+    else
+      config.xdg.configHome;
 in
 {
   options.programs.iamb = {
@@ -15,23 +20,21 @@ in
     package = lib.mkPackageOption pkgs "iamb" { nullable = true; };
 
     settings = lib.mkOption {
-      type = tomlFormat.type;
+      inherit (tomlFormat) type;
       default = { };
-      example = lib.literalExpression ''
-        {
-          default_profile = "personal";
-          settings = {
-            notifications.enabled = true;
-            image_preview.protocol = {
-              type = "kitty";
-              size = {
-                height = 10;
-                width = 66;
-              };
+      example = {
+        default_profile = "personal";
+        settings = {
+          notifications.enabled = true;
+          image_preview.protocol = {
+            type = "kitty";
+            size = {
+              height = 10;
+              width = 66;
             };
           };
-        }
-      '';
+        };
+      };
       description = ''
         Configuration written to
         {file}`$XDG_CONFIG_HOME/iamb/config.toml`.
@@ -46,7 +49,7 @@ in
   config = lib.mkIf cfg.enable {
     home.packages = lib.mkIf (cfg.package != null) [ cfg.package ];
 
-    xdg.configFile."iamb/config.toml" = lib.mkIf (cfg.settings != { }) {
+    home.file."${configDir}/iamb/config.toml" = lib.mkIf (cfg.settings != { }) {
       source = tomlFormat.generate "iamb-config" cfg.settings;
     };
   };

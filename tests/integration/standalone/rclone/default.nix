@@ -1,106 +1,95 @@
-{ pkgs, ... }:
-
 {
-  name = "rclone";
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
-  nodes.machine =
-    { ... }:
-    {
-      imports = [ "${pkgs.path}/nixos/modules/installer/cd-dvd/channel.nix" ];
-      virtualisation.memorySize = 2048;
-      users.users.alice = {
-        isNormalUser = true;
-        description = "Alice Foobar";
-        password = "foobar";
-        uid = 1000;
-      };
+let
+  baseMachine = {
+    imports = [ "${pkgs.path}/nixos/modules/installer/cd-dvd/channel.nix" ];
+    virtualisation.memorySize = 2048;
+    users.users.alice = {
+      isNormalUser = true;
+      description = "Alice Foobar";
+      password = "foobar";
+      uid = 1000;
+    };
+  };
+in
+{
+  imports = [
+    ./no-secrets.nix
+    ./with-secrets-in-store.nix
+    ./secrets-arbitrary-characters.nix
+    ./no-type.nix
+    ./mount.nix
+    ./serve.nix
+    ./shell.nix
+    ./atomic.nix
+    ./write-after.nix
+  ];
+
+  options.script = lib.mkOption {
+    type = lib.types.lines;
+  };
+
+  config = {
+    name = "rclone";
+
+    nodes = {
+      machine = baseMachine;
+      remote = baseMachine;
     };
 
-  testScript = ''
-    start_all()
-    machine.wait_for_unit("network.target")
-    machine.wait_for_unit("multi-user.target")
+    testScript = ''
+      start_all()
+      machine.wait_for_unit("network.target")
+      machine.wait_for_unit("multi-user.target")
 
-    home_manager = "${../../../..}"
+      home_manager = "${../../../..}"
 
-    def login_as_alice():
-      machine.wait_until_tty_matches("1", "login: ")
-      machine.send_chars("alice\n")
-      machine.wait_until_tty_matches("1", "Password: ")
-      machine.send_chars("foobar\n")
-      machine.wait_until_tty_matches("1", "alice\\@machine")
+      def login_as_alice():
+        machine.wait_until_tty_matches("1", "login: ")
+        machine.send_chars("alice\n")
+        machine.wait_until_tty_matches("1", "Password: ")
+        machine.send_chars("foobar\n")
+        machine.wait_until_tty_matches("1", "alice\\@machine")
 
-    def logout_alice():
-      machine.send_chars("exit\n")
+      def logout_alice():
+        machine.send_chars("exit\n")
 
-    def alice_cmd(cmd):
-      return f"su -l alice --shell /bin/sh -c $'export XDG_RUNTIME_DIR=/run/user/$UID ; {cmd}'"
+      def alice_cmd(cmd):
+        return f"su -l alice --shell /bin/sh -c $'export XDG_RUNTIME_DIR=/run/user/$UID ; {cmd}'"
 
-    def succeed_as_alice(*cmds):
-      return machine.succeed(*map(alice_cmd,cmds))
+      def succeed_as_alice(*cmds, box=machine):
+        return box.succeed(*map(alice_cmd,cmds))
 
-    def fail_as_alice(*cmds):
-      return machine.fail(*map(alice_cmd,cmds))
+      def systemctl_succeed_as_alice(cmd):
+        status, out = machine.systemctl(cmd, "alice")
+        assert status == 0, f"failed to run systemctl {cmd}"
+        return out
 
-    # Create a persistent login so that Alice has a systemd session.
-    login_as_alice()
+      def fail_as_alice(*cmds):
+        return machine.fail(*map(alice_cmd,cmds))
 
-    # Set up a home-manager channel.
-    succeed_as_alice(" ; ".join([
-      "mkdir -p /home/alice/.nix-defexpr/channels",
-      f"ln -s {home_manager} /home/alice/.nix-defexpr/channels/home-manager"
-    ]))
+      # Create a persistent login so that Alice has a systemd session.
+      login_as_alice()
 
-    with subtest("Home Manager installation"):
-      succeed_as_alice("nix-shell \"<home-manager>\" -A install")
+      # Set up a home-manager channel.
+      succeed_as_alice(" ; ".join([
+        "mkdir -p /home/alice/.nix-defexpr/channels",
+        f"ln -s {home_manager} /home/alice/.nix-defexpr/channels/home-manager"
+      ]))
 
-    succeed_as_alice("cp ${./home.nix} /home/alice/.config/home-manager/home.nix")
+      with subtest("Home Manager installation"):
+        succeed_as_alice("nix-shell \"<home-manager>\" -A install")
 
-    with subtest("Generate with no secrets"):
-      succeed_as_alice("install -m644 ${./no-secrets.nix} /home/alice/.config/home-manager/test-remote.nix")
+      succeed_as_alice("cp ${./home.nix} /home/alice/.config/home-manager/home.nix")
 
-      actual = succeed_as_alice("home-manager switch")
-      expected = "Activating createRcloneConfig"
-      assert expected in actual, \
-        f"expected home-manager switch to contain {expected}, but got {actual}"
+      ${config.script}
 
-      succeed_as_alice("diff -u ${./no-secrets.conf} /home/alice/.config/rclone/rclone.conf")
-
-    with subtest("Generate with secrets from store"):
-      succeed_as_alice("install -m644 ${./with-secrets-in-store.nix} /home/alice/.config/home-manager/test-remote.nix")
-
-      actual = succeed_as_alice("home-manager switch")
-      expected = "Activating createRcloneConfig"
-      assert expected in actual, \
-        f"expected home-manager switch to contain {expected}, but got {actual}"
-
-      succeed_as_alice("diff -u ${./with-secrets-in-store.conf} /home/alice/.config/rclone/rclone.conf")
-
-    with subtest("Secrets with spaces"):
-      succeed_as_alice("install -m644 ${./secrets-with-whitespace.nix} /home/alice/.config/home-manager/test-remote.nix")
-
-      actual = succeed_as_alice("home-manager switch")
-      expected = "Activating createRcloneConfig"
-      assert expected in actual, \
-        f"expected home-manager switch to contain {expected}, but got {actual}"
-
-      succeed_as_alice("diff -u ${./secrets-with-whitespace.conf} /home/alice/.config/rclone/rclone.conf")
-
-    with subtest("Un-typed remote"):
-      succeed_as_alice("install -m644 ${./no-type.nix} /home/alice/.config/home-manager/test-remote.nix")
-
-      actual = fail_as_alice("home-manager switch")
-      expected = "Activating createRcloneConfig"
-      assert expected not in actual, \
-        f"expected home-manager switch to contain {expected}, but got {actual}"
-
-      expected = "An attribute set containing a remote type and options."
-      assert expected not in actual, \
-        f"expected home-manager switch to contain {expected}, but got {actual}"
-
-
-    # TODO: verify correct activation order with the agenix and sops hm modules
-
-    logout_alice()
-  '';
+      logout_alice()
+    '';
+  };
 }

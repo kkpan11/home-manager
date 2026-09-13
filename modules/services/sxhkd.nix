@@ -37,18 +37,15 @@ in
   options.services.sxhkd = {
     enable = lib.mkEnableOption "simple X hotkey daemon";
 
-    package = mkOption {
-      type = types.package;
-      default = pkgs.sxhkd;
-      defaultText = "pkgs.sxhkd";
-      description = "Package containing the {command}`sxhkd` executable.";
+    package = lib.mkPackageOption pkgs "sxhkd" {
+      extraDescription = "containing the sxhkd executable";
     };
 
     extraOptions = mkOption {
       type = types.listOf types.str;
       default = [ ];
       description = "Command line arguments to invoke {command}`sxhkd` with.";
-      example = literalExpression ''[ "-m 1" ]'';
+      example = [ "-m 1" ];
     };
 
     keybindings = mkOption {

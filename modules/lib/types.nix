@@ -16,7 +16,6 @@ let
     mergeAttrs
     mergeDefaultOption
     mergeOneOption
-    mergeOptions
     mkOption
     mkOptionType
     showFiles
@@ -108,7 +107,7 @@ rec {
         sameOrNull = x: y: if x == y then y else null;
         # A bit naive to just check the first entry…
         sharedDefType = foldl' sameOrNull (head defTypes) defTypes;
-        allChecked = all (x: check x) vals;
+        allChecked = all check vals;
       in
       if sharedDefType == null then
         throw (
@@ -117,7 +116,7 @@ rec {
           + " ${showFiles (getFiles defs)}."
         )
       else if gvar.isArray sharedDefType && allChecked then
-        gvar.mkValue ((types.listOf gvariant).merge loc (map (d: d // { value = d.value.value; }) vdefs))
+        gvar.mkValue ((types.listOf gvariant).merge loc (map (d: d // { inherit (d.value) value; }) vdefs))
         // {
           type = sharedDefType;
         }
@@ -170,4 +169,109 @@ rec {
       );
     in
     valueType;
+
+  sourceFile =
+    targetDir: fileName:
+    let
+      targetFile = "${targetDir}/${fileName}";
+    in
+    types.submodule (
+      { config, ... }:
+      {
+        options = {
+          target = mkOption {
+            type = types.singleLineStr;
+            internal = true;
+            readOnly = true;
+          };
+          source = mkOption {
+            type = types.nullOr types.path;
+            default = null;
+            description = ''
+              The path to be linked to `${targetDir}` if {option}`source` is a directory,
+              or to `${targetFile}` if it is a file.
+            '';
+          };
+          text = mkOption {
+            type = types.lines;
+            default = "";
+            description = ''
+              Text to be included in `${targetFile}`.
+            '';
+          };
+          recursive = lib.mkEnableOption ''
+            Whether to recursively link files from {option}`source` (if it is a directory) in `${targetDir}`.
+          '';
+        };
+        config = {
+          target =
+            if config.source != null && lib.pathIsDirectory config.source then targetDir else targetFile;
+        };
+      }
+    );
+
+  sourceFileOrLines =
+    targetDir: fileName:
+    let
+      fileType = sourceFile targetDir fileName;
+      union = types.either types.lines fileType;
+    in
+    union
+    // {
+      merge =
+        loc: defs:
+        fileType.merge loc (
+          map (
+            def:
+            if types.lines.check def.value then
+              {
+                inherit (def) file;
+                value = {
+                  text = def.value;
+                  source = null;
+                  recursive = false;
+                };
+              }
+            else
+              def
+          ) defs
+        );
+    };
+
+  SCFGDirectives =
+    let
+      inherit (types)
+        listOf
+        nullOr
+        submodule
+        ;
+      primType =
+        with types;
+        oneOf [
+          int
+          float
+          str
+          bool
+        ];
+      directive =
+        (submodule {
+          options = {
+            name = mkOption { type = types.str; };
+            params = mkOption {
+              type = nullOr (listOf primType);
+              default = null;
+            };
+            children = mkOption {
+              type = nullOr directives;
+              default = null;
+            };
+          };
+        })
+        // {
+          description = "test";
+        };
+      directives = listOf directive;
+    in
+    # directives;
+    lib.types.anything;
 }

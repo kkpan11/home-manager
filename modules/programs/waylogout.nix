@@ -8,7 +8,7 @@ let
   cfg = config.programs.waylogout;
 in
 {
-  meta.maintainers = [ lib.hm.maintainers.noodlez ];
+  meta.maintainers = [ lib.maintainers.noodlez1232 ];
 
   options.programs.waylogout = {
     enable = lib.mkOption {
@@ -58,7 +58,7 @@ in
     xdg.configFile."waylogout/config" = lib.mkIf (cfg.settings != { }) {
       text = lib.concatStrings (
         lib.mapAttrsToList (
-          n: v: if v == false then "" else (if v == true then n else n + "=" + builtins.toString v) + "\n"
+          n: v: if v == false then "" else (if v == true then n else n + "=" + toString v) + "\n"
         ) cfg.settings
       );
     };

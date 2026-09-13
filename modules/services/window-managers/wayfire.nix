@@ -9,12 +9,12 @@
 
   options.wayland.windowManager.wayfire =
     let
-      types = lib.types;
+      inherit (lib) types;
 
       configIniType =
         with types;
         let
-          primitiveType = either str (either bool number);
+          primitiveType = either (either str path) (either bool number);
           sectionType = attrsOf primitiveType;
         in
         attrsOf sectionType;
@@ -65,21 +65,21 @@
 
           See <https://github.com/WayfireWM/wayfire/wiki/Configuration>
         '';
-        example = lib.literalExpression ''
-          {
-            core.plugins = "command expo cube";
-            command = {
-              binding_terminal = "alacritty";
-              command_terminal = "alacritty";
-            };
-          }
-        '';
+        example = {
+          core.plugins = "command expo cube";
+          command = {
+            binding_terminal = "alacritty";
+            command_terminal = "alacritty";
+          };
+        };
       };
 
       wf-shell = {
         enable = lib.mkEnableOption "Manage wf-shell Configuration";
 
-        package = lib.mkPackageOption pkgs.wayfirePlugins "wf-shell" { };
+        package = lib.mkPackageOption pkgs.wayfirePlugins "wf-shell" {
+          pkgsText = "pkgs.wayfirePlugins";
+        };
 
         settings = lib.mkOption {
           type = configIniType;
@@ -89,14 +89,12 @@
 
             See <https://github.com/WayfireWM/wf-shell/blob/master/wf-shell.ini.example>
           '';
-          example = lib.literalExpression ''
-            {
-              panel = {
-                widgets_left = "menu spacing4 launchers window-list";
-                autohide = true;
-              };
-            }
-          '';
+          example = {
+            panel = {
+              widgets_left = "menu spacing4 launchers window-list";
+              autohide = true;
+            };
+          };
         };
       };
 
@@ -155,7 +153,7 @@
 
       finalPackage = pkgs.wayfire-with-plugins.override {
         wayfire = cfg.package;
-        plugins = cfg.plugins;
+        inherit (cfg) plugins;
       };
     in
     lib.mkIf cfg.enable {

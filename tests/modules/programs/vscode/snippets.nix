@@ -1,7 +1,12 @@
-{ pkgs, lib, ... }:
+package:
+
+{
+  pkgs,
+  lib,
+  ...
+}:
 
 let
-
   snippetsDir =
     name:
     if pkgs.stdenv.hostPlatform.isDarwin then
@@ -61,15 +66,12 @@ let
       };
     };
   };
-
 in
+
 {
   programs.vscode = {
     enable = true;
-    package = pkgs.writeScriptBin "vscode" "" // {
-      pname = "vscode";
-      version = "1.75.0";
-    };
+    inherit package;
     profiles = {
       default = snippets;
       test = snippets;

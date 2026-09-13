@@ -58,11 +58,73 @@ YAML, INI, TOML, or even a plain list of key/value pairs then consider
 using a `settings` option as described in [Nix RFC
 42](https://github.com/NixOS/rfcs/blob/master/rfcs/0042-config-option.md).
 
+These guidelines describe the minimum option design requirements. Before
+submitting a module, compare it against the upstream documentation or
+source code and verify that the generated files, services, environment
+variables, and command line arguments all match the upstream behavior
+you intend to expose.
+
+If a module installs a package, try to make the package option nullable,
+for example
+
+``` nix
+package = lib.mkPackageOption pkgs "xdg-terminal-exec" { nullable = true; };
+```
+
+This lets users keep installation outside Home Manager, for example via
+`apt` or because the program is built into macOS, while still using the
+module for configuration. Keeping the package non-nullable is fine when
+the enabled behavior structurally requires the executable or when
+package-less support would make the module significantly more complex.
+
+Avoid generating files for empty settings, null packages, or optional
+features that are not configured.
+
+If upstream does not use XDG paths by default but supports changing the
+configuration location with an environment variable, for example
+`FOO_HOME`, expose a `configDir` option and use it to respect
+`home.preferXdgDirectories`.
+
+## Migrate settings with shared helpers {#sec-guidelines-settings-migrations}
+
+Use `lib.hm.deprecations.mkSettingsRenamedOptionModules` for unchanged values
+moving into settings. Specify native key paths explicitly when casing or
+literal dotted keys differ from the default snake-case transformation.
+Set `preserveOrder = true` when legacy and new list definitions must retain
+relative `mkBefore` and `mkAfter` ordering. Value conversions belong in
+`lib.mkChangedOptionModule`, not in a path-rename mapping.
+
+For a default-empty attribute-set option formerly applied as a final overlay,
+use `lib.hm.deprecations.mkSettingsOverlay`:
+
+``` nix
+let
+  overlay = lib.hm.deprecations.mkSettingsOverlay {
+    inherit options;
+    from = [ "programs" "example" "extraConfig" ];
+    to = [ "programs" "example" "settings" ];
+  };
+in
+{
+  imports = [ overlay.module ];
+}
+```
+
+The helper forwards raw definitions, applying root priorities only to supplied
+keys. Use `overlay.keys` to suppress modeled contributions for keys that the
+old overlay overwrote. Disabled conditional keys are absent; explicit null
+and empty values still count as supplied. Whole sources weaker than the old
+empty option default are ignored.
+
+Keep application defaults, conversions, and output filtering in the module.
+Test legacy overlay precedence and ordinary settings overrides separately.
+Do not replace module merging with a final attribute-set overlay on settings.
+
 ## Add relevant tests {#sec-guidelines-add-tests}
 
 If at all possible, make sure to add new tests and expand existing tests
 so that your change will keep working in the future. See
-[Tests](#sec-tests) for more information about the Home Manager test
+[Tests](tests.md#sec-tests) for more information about the Home Manager test
 suite.
 
 All contributed code *must* pass the test suite.
@@ -89,8 +151,38 @@ the man page version of the module options looks good:
 
 ``` shell
 $ nix-build -A docs.manPages
-$ man ./result/share/man/man5/home-configuration.nix.5.gz
+$ man ./result/share/man/man5/home-configuration.nix.5
 ```
+
+## Module Auto-importing {#sec-module-auto-importing}
+
+Home Manager automatically imports all modules from the `modules/programs/` and
+`modules/services/` directories. This auto-importing behavior follows these
+rules:
+
+- **Nix files**: All `.nix` files in these directories are automatically
+  imported
+- **Directories**: All subdirectories are automatically imported (typically
+  containing a `default.nix` file)
+- **Exclusions**: Files and directories starting with an underscore (`_`) are
+  excluded from auto-importing
+
+This allows for flexible module organization:
+
+```
+modules/programs/
+├── git.nix              # Single-file module (imported)
+├── firefox/             # Multi-file module (imported)
+│   ├── default.nix
+│   └── addons.nix
+├── _experimental.nix    # Excluded (starts with _)
+└── _wip/                # Excluded directory (starts with _)
+    └── newfeature.nix
+```
+
+When adding a new module, simply place it in the appropriate directory
+(`programs/` for user programs, `services/` for user services) and it will be
+automatically discovered and included in the Home Manager module system.
 
 ## Add yourself as a module maintainer {#_add_yourself_as_a_module_maintainer}
 
@@ -125,11 +217,16 @@ consistent commit message format as described in
 
 If your contribution includes a change that should be communicated to
 users of Home Manager then you can add a news entry. The entry must be
-formatted as described in [News](#sec-news).
+formatted as described in [News](news.md#sec-news).
 
-When new modules are added a news entry should be included but you do
-not need to create this entry manually. The merging maintainer will
-create the entry for you. This is to reduce the risk of merge conflicts.
+When new modules are added a news entry should be included.
+
+News entries and release notes serve different purposes. Release notes
+should be updated separately when a change affects users migrating
+between stable releases, such as state version default changes, required
+migration steps, or broad behavior changes. See
+[Release Notes](release-notes.md#sec-contributing-release-notes) and [News](news.md#sec-news)
+for more details.
 
 ## Use conditional modules and news {#sec-guidelines-conditional-modules}
 
@@ -138,12 +235,16 @@ of the supported platforms. The most common example of platform specific
 modules are those that define systemd user services, which only works on
 Linux systems.
 
-If you add a module that is platform specific then make sure to include
-a condition in the `loadModule` function call. This will make the module
-accessible only on systems where the condition evaluates to `true`.
+If you add a module that is platform specific then make sure the module
+guards platform-specific configuration with an appropriate condition, for
+example `pkgs.stdenv.hostPlatform.isLinux` or
+`pkgs.stdenv.hostPlatform.isDarwin`. Modules in `modules/programs/` and
+`modules/services/` are auto-imported, so the platform condition should live
+in the module behavior and in any platform-specific tests rather than in a
+separate module discovery call.
 
 Similarly, if you are adding a news entry then it should be shown only
-to users that may find it relevant, see [News](#sec-news) for a
+to users that may find it relevant, see [News](news.md#sec-news) for a
 description of conditional news.
 
 ## Mind the license {#sec-guidelines-licensing}
@@ -165,6 +266,11 @@ The commits in your pull request should be reasonably self-contained,
 that is, each commit should make sense in isolation. In particular, you
 will be asked to amend any commit that introduces syntax errors or
 similar problems even if they are fixed in a later commit.
+
+Keep commits atomic and separated by concern. For example, a new
+maintainer entry should be a separate first commit, and a shared module
+should be committed separately from integrations in existing modules.
+Pull requests should not include merge commits or fixup commits.
 
 The commit messages should follow the [seven
 rules](https://chris.beams.io/posts/git-commit/#seven-rules), except for
@@ -206,10 +312,10 @@ a long description if you wish.
 
 ## Code Style {#sec-code-style}
 
-The code in Home Manager is formatted by the
-[nixfmt](https://github.com/serokell/nixfmt/) tool and the formatting is
-checked in the pull request tests. Run the `format` tool inside the
-project repository before submitting your pull request.
+The code in Home Manager is formatted by the [treefmt](https://treefmt.com) tool
+and the formatting is checked in the pull request tests. Run `nix fmt` or
+`treefmt` (with required formatters which can be found in `treefmt.toml` in your
+`$PATH`) inside the project repository before submitting your pull request.
 
 Keep lines at a reasonable width, ideally 80 characters or less. This
 also applies to string literals.

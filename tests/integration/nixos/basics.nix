@@ -4,29 +4,25 @@
   name = "nixos-basics";
   meta.maintainers = [ pkgs.lib.maintainers.rycee ];
 
-  nodes.machine =
-    { ... }:
-    {
-      imports = [ ../../../nixos ]; # Import the HM NixOS module.
+  nodes.machine = {
+    imports = [ ../../../nixos ]; # Import the HM NixOS module.
 
-      virtualisation.memorySize = 2048;
+    virtualisation.memorySize = 2048;
 
-      users.users.alice = {
-        isNormalUser = true;
-        description = "Alice Foobar";
-        password = "foobar";
-        uid = 1000;
-      };
-
-      home-manager.users.alice =
-        { ... }:
-        {
-          home.stateVersion = "24.11";
-          home.file.test.text = "testfile";
-          # Enable a light-weight systemd service.
-          services.pueue.enable = true;
-        };
+    users.users.alice = {
+      isNormalUser = true;
+      description = "Alice Foobar";
+      password = "foobar";
+      uid = 1000;
     };
+
+    home-manager.users.alice = {
+      home.stateVersion = "24.11";
+      home.file.test.text = "testfile";
+      # Enable a light-weight systemd service.
+      services.pueue.enable = true;
+    };
+  };
 
   testScript = ''
     def login_as_alice():
@@ -69,7 +65,7 @@
 
       # Shut down pueue, then run the activation again. Afterwards, the service
       # should be running.
-      machine.succeed("systemctl --user -M alice@.host stop pueued.service")
+      succeed_as_alice("systemctl --user stop pueued.service")
 
       fail_as_alice("pueue status")
 
@@ -82,17 +78,15 @@
 
       logout_alice()
 
-    with subtest("GC root and profile"):
-      # There should be a GC root and Home Manager profile and they should point
-      # to the same path in the Nix store.
-      gcroot = "/home/alice/.local/state/home-manager/gcroots/current-home"
-      gcrootTarget = machine.succeed(f"readlink {gcroot}")
+    with subtest("no profile management"):
+      # There should be no Home Manager profile since we are not
+      # using legacy profile management.
+      hmProfile = "/home/alice/.local/state/nix/profiles/home-manager"
+      machine.succeed(f"test ! -e {hmProfile}")
 
-      profile = "/home/alice/.local/state/nix/profiles"
-      profileTarget = machine.succeed(f"readlink {profile}/home-manager")
-      profile1Target = machine.succeed(f"readlink {profile}/{profileTarget}")
-
-      assert gcrootTarget == profile1Target, \
-        f"expected GC root and profile to point to same, but pointed to {gcrootTarget} and {profile1Target}"
+      # There should be a gcroot, however since we want to keep track of which
+      # generation is currently enabled.
+      hmGcroot = "/home/alice/.local/state/home-manager/gcroots/current-home"
+      machine.succeed(f"test -e {hmGcroot}")
   '';
 }

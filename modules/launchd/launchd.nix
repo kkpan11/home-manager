@@ -1,7 +1,7 @@
 # launchd option type from nix-darwin
 #
 # Original Source:
-# https://github.com/LnL7/nix-darwin/blob/14a12e9/modules/launchd/launchd.nix
+# https://github.com/nix-darwin/nix-darwin/blob/14a12e9/modules/launchd/launchd.nix
 
 # Copyright 2017 Daiderd Jordan
 #
@@ -155,6 +155,18 @@ in
         This key maps to the second argument of `execvp(3)`.  This key is required in the absence of the Program
         key. Please note: many people are confused by this key. Please read `execvp(3)` very carefully!
       '';
+      # TODO: Remove this some time after 25.01.
+      apply =
+        value:
+        if value != null then
+          map (
+            item:
+            lib.warnIf (lib.hasInfix "&amp;" item)
+              "A value for `ProgramArguments` contains the literal string `&amp;`. This is no longer necessary and will lead to double-escaping, as home-manager now automatically escapes special characters."
+              item
+          ) value
+        else
+          value;
     };
 
     EnableGlobbing = mkOption {
@@ -247,6 +259,10 @@ in
               AfterInitialDemand = mkOption {
                 type = types.nullOr types.bool;
                 default = null;
+                description = ''
+                  Whether to defer evaluating other `KeepAlive` conditions until
+                  the job has been started at least once by demand.
+                '';
               };
 
             };
@@ -262,7 +278,7 @@ in
         multiple keys are provided, launchd ORs them, thus providing maximum flexibility to the job to refine
         the logic and stall if necessary. If launchd finds no reason to restart the job, it falls back on
         demand based invocation.  Jobs that exit quickly and frequently when configured to be kept alive will
-        be throttled to converve system resources.
+        be throttled to conserve system resources.
       '';
     };
 

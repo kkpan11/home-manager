@@ -1,5 +1,3 @@
-{ config, ... }:
-
 {
   programs.zsh = {
     enable = true;
@@ -30,23 +28,23 @@
       HISTSIZE="10000"
       SAVEHIST="10000"
 
-      HISTFILE="$HOME/.zsh_history"
+      HISTFILE="/home/hm-user/.zsh_history"
       mkdir -p "$(dirname "$HISTFILE")"
 
-      setopt HIST_FCNTL_LOCK
-      unsetopt APPEND_HISTORY
-      setopt HIST_IGNORE_DUPS
-      unsetopt HIST_IGNORE_ALL_DUPS
-      unsetopt HIST_SAVE_NO_DUPS
-      unsetopt HIST_FIND_NO_DUPS
-      setopt HIST_IGNORE_SPACE
-      unsetopt HIST_EXPIRE_DUPS_FIRST
-      setopt SHARE_HISTORY
-      unsetopt EXTENDED_HISTORY
-
+      # Set shell options
+      set_opts=(
+        HIST_FCNTL_LOCK HIST_IGNORE_DUPS HIST_IGNORE_SPACE SHARE_HISTORY
+        NO_APPEND_HISTORY NO_EXTENDED_HISTORY NO_HIST_EXPIRE_DUPS_FIRST
+        NO_HIST_FIND_NO_DUPS NO_HIST_IGNORE_ALL_DUPS NO_HIST_SAVE_NO_DUPS
+      )
+      for opt in "''${set_opts[@]}"; do
+        setopt "$opt"
+      done
+      unset opt set_opts
 
       alias -- test1=alias
       alias -- test2=alias2
       alias -g -- global=test''}
+
   '';
 }

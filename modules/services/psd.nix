@@ -15,7 +15,7 @@ let
     ''}
 
     USE_BACKUP="${if cfg.useBackup then "yes" else "no"}"
-    BACKUP_LIMIT=${builtins.toString cfg.backupLimit}
+    BACKUP_LIMIT=${toString cfg.backupLimit}
   '';
 in
 {
@@ -23,6 +23,8 @@ in
 
   options.services.psd = {
     enable = lib.mkEnableOption "Profile-sync-daemon service";
+
+    package = lib.mkPackageOption pkgs "profile-sync-daemon" { };
 
     resyncTimer = lib.mkOption {
       type = lib.types.str;
@@ -57,7 +59,7 @@ in
       type = lib.types.bool;
       default = true;
       description = ''
-        Whether to completly enable or disable the crash recovery feature.
+        Whether to completely enable or disable the crash recovery feature.
       '';
     };
 
@@ -75,12 +77,12 @@ in
       (lib.hm.assertions.assertPlatform "services.psd" pkgs lib.platforms.linux)
     ];
 
-    home.packages = [ pkgs.profile-sync-daemon ];
+    home.packages = [ cfg.package ];
 
     systemd.user = {
       services =
         let
-          exe = "${pkgs.profile-sync-daemon}/bin/profile-sync-daemon";
+          exe = lib.getExe' cfg.package "profile-sync-daemon";
           envPath = lib.makeBinPath (
             with pkgs;
             [
@@ -91,9 +93,9 @@ in
               gnused
               coreutils
               findutils
-              nettools
+              net-tools
               util-linux
-              profile-sync-daemon
+              cfg.package
             ]
           );
         in

@@ -20,6 +20,8 @@ in
     programs.browserpass = {
       enable = lib.mkEnableOption "the browserpass extension host application";
 
+      package = lib.mkPackageOption pkgs "browserpass" { };
+
       browsers = lib.mkOption {
         type = lib.types.listOf (lib.types.enum browsers);
         default = browsers;
@@ -30,10 +32,12 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    home.file = lib.foldl' (a: b: a // b) { } (
+    home.file = lib.mergeAttrsList (
       lib.concatMap (
         x:
-        with pkgs.stdenv;
+        let
+          inherit (pkgs.stdenv.hostPlatform) isDarwin;
+        in
         if x == "brave" then
           let
             dir =
@@ -47,7 +51,7 @@ in
               # Policies are read from `/etc/brave/policies` only
               # https://github.com/brave/brave-browser/issues/19052
               "${dir}/com.github.browserpass.native.json".source =
-                "${pkgs.browserpass}/lib/browserpass/hosts/chromium/com.github.browserpass.native.json";
+                "${cfg.package}/lib/browserpass/hosts/chromium/com.github.browserpass.native.json";
             }
           ]
         else if x == "chrome" then
@@ -61,9 +65,9 @@ in
           [
             {
               "${dir}/com.github.browserpass.native.json".source =
-                "${pkgs.browserpass}/lib/browserpass/hosts/chromium/com.github.browserpass.native.json";
+                "${cfg.package}/lib/browserpass/hosts/chromium/com.github.browserpass.native.json";
               "${dir}/../policies/managed/com.github.browserpass.native.json".source =
-                "${pkgs.browserpass}/lib/browserpass/policies/chromium/com.github.browserpass.native.json";
+                "${cfg.package}/lib/browserpass/policies/chromium/com.github.browserpass.native.json";
             }
           ]
         else if x == "chromium" then
@@ -77,11 +81,11 @@ in
           [
             {
               "${dir}/com.github.browserpass.native.json".source =
-                "${pkgs.browserpass}/lib/browserpass/hosts/chromium/com.github.browserpass.native.json";
+                "${cfg.package}/lib/browserpass/hosts/chromium/com.github.browserpass.native.json";
             }
             {
               "${dir}/../policies/managed/com.github.browserpass.native.json".source =
-                "${pkgs.browserpass}/lib/browserpass/policies/chromium/com.github.browserpass.native.json";
+                "${cfg.package}/lib/browserpass/policies/chromium/com.github.browserpass.native.json";
             }
           ]
         else if x == "firefox" then
@@ -95,7 +99,7 @@ in
           [
             {
               "${dir}/com.github.browserpass.native.json".source =
-                "${pkgs.browserpass}/lib/browserpass/hosts/firefox/com.github.browserpass.native.json";
+                "${cfg.package}/lib/browserpass/hosts/firefox/com.github.browserpass.native.json";
             }
           ]
         else if x == "librewolf" then
@@ -109,7 +113,7 @@ in
           [
             {
               "${dir}/com.github.browserpass.native.json".source =
-                "${pkgs.browserpass}/lib/browserpass/hosts/firefox/com.github.browserpass.native.json";
+                "${cfg.package}/lib/browserpass/hosts/firefox/com.github.browserpass.native.json";
             }
           ]
 
@@ -124,9 +128,9 @@ in
           [
             {
               "${dir}/com.github.browserpass.native.json".source =
-                "${pkgs.browserpass}/lib/browserpass/hosts/chromium/com.github.browserpass.native.json";
+                "${cfg.package}/lib/browserpass/hosts/chromium/com.github.browserpass.native.json";
               "${dir}/../policies/managed/com.github.browserpass.native.json".source =
-                "${pkgs.browserpass}/lib/browserpass/policies/chromium/com.github.browserpass.native.json";
+                "${cfg.package}/lib/browserpass/policies/chromium/com.github.browserpass.native.json";
             }
           ]
         else

@@ -72,9 +72,28 @@ in
       };
     }
     // {
+      test.asserts.warnings.expected = [
+        ''
+          Using `${lib.showOption modulePath}.profiles.bookmarks.bookmarks` as an attribute set is deprecated and will be
+          removed in a future release. Please use `${lib.showOption modulePath}.profiles.bookmarks.bookmarks.settings` with `${lib.showOption modulePath}.profiles.bookmarks.bookmarks.force = true` instead.
+
+          Set `force = true` to acknowledge replacing existing custom bookmarks.
+
+          Replace:
+            ${lib.showOption modulePath}.profiles.bookmarks.bookmarks = { ... };
+
+          With:
+            ${lib.showOption modulePath}.profiles.bookmarks.bookmarks = {
+              force = true;
+              settings = { ... };
+            };
+
+        ''
+      ];
+
       nmt.script = ''
         bookmarksUserJs=$(normalizeStorePaths \
-          home-files/${cfg.configPath}/bookmarks/user.js)
+          "home-files/${cfg.profilesPath}/bookmarks/user.js")
 
         assertFileContent \
           $bookmarksUserJs \
@@ -82,11 +101,11 @@ in
 
         bookmarksFile="$(sed -n \
           '/browser.bookmarks.file/ {s|^.*\(/nix/store[^"]*\).*|\1|;p}' \
-          $TESTED/home-files/${cfg.configPath}/bookmarks/user.js)"
+          "$TESTED/home-files/${cfg.profilesPath}/bookmarks/user.js")"
 
         assertFileContent \
           $bookmarksFile \
-          ${./expected-bookmarks.html}
+          ${./expected-bookmarks-attrset.html}
       '';
     }
   );

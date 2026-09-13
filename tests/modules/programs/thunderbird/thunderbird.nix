@@ -31,7 +31,24 @@
         ];
       };
 
-      aliases = [ "home-manager@example.com" ];
+      aliases = [
+        "home-manager@example.com"
+        {
+          realName = "Home Manager";
+          address = "homeManager@alias.example.com";
+          userName = "homeManager@alias.example.com";
+
+          signature = {
+            showSignature = "none";
+          };
+
+          smtp = {
+            host = "ml.example.com";
+            port = 465;
+            tls.enable = true;
+          };
+        }
+      ];
 
       gpg.key = "ABC";
 
@@ -42,6 +59,7 @@
       smtp.port = 456;
 
       signature = {
+        htmlFormat = true;
         text = "signature";
         showSignature = "append";
       };
@@ -58,14 +76,65 @@
     };
   };
 
+  accounts.calendar.accounts = {
+    calendar = {
+      thunderbird = {
+        enable = true;
+        profiles = [ "first" ];
+      };
+      primary = true;
+      remote = {
+        type = "caldav";
+        url = "https://my.caldav.server/calendar";
+        userName = "testuser";
+      };
+    };
+    holidays = {
+      thunderbird = {
+        enable = true;
+        readOnly = true;
+      };
+      remote = {
+        type = "http";
+        url = "https://www.thunderbird.net/media/caldata/autogen/GermanHolidays.ics";
+      };
+    };
+    local = {
+      thunderbird = {
+        enable = true;
+        profiles = [ "second" ];
+      };
+    };
+  };
+
+  accounts.contact.accounts = {
+    family = {
+      remote = {
+        type = "carddav";
+        url = "https://my.caldav.server/contact/";
+        userName = "home-manager@example.com";
+      };
+      thunderbird = {
+        enable = true;
+        profiles = [ "first" ];
+      };
+    };
+    work = {
+      thunderbird = {
+        enable = true;
+        profiles = [ "second" ];
+      };
+    };
+    shared = {
+      thunderbird.enable = true;
+    };
+  };
+
   programs.thunderbird = {
     enable = true;
     package = config.lib.test.mkStubPackage {
       name = "thunderbird";
     };
-
-    # Disable warning so that platforms' behavior is the same
-    darwinSetupWarning = false;
 
     profiles = {
       first = {
@@ -89,17 +158,25 @@
           "imperative_account"
           "hm-account"
         ];
-      };
-
-      second.settings = {
-        "second.setting" = "some-test-setting";
-        second.nested.evenFurtherNested = [
-          1
-          2
-          3
+        calendarAccountsOrder = [
+          "calendar"
+          "imperative_cal"
+          "holidays"
         ];
       };
-      second.accountsOrder = [ "account1" ];
+
+      second = {
+        settings = {
+          "second.setting" = "some-test-setting";
+          second.nested.evenFurtherNested = [
+            1
+            2
+            3
+          ];
+        };
+        accountsOrder = [ "account1" ];
+        calendarAccountsOrder = [ "calendar1" ];
+      };
     };
 
     settings = {
@@ -110,7 +187,7 @@
 
   nmt.script =
     let
-      isDarwin = pkgs.stdenv.hostPlatform.isDarwin;
+      inherit (pkgs.stdenv.hostPlatform) isDarwin;
       configDir = if isDarwin then "Library/Thunderbird" else ".thunderbird";
       profilesDir = if isDarwin then "${configDir}/Profiles" else "${configDir}";
       platform = if isDarwin then "darwin" else "linux";

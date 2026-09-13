@@ -16,26 +16,18 @@ let
 
   cfg = config.programs.qutebrowser;
 
-  formatLine =
-    o: n: v:
-    let
-      formatValue =
-        v:
-        if v == null then
-          "None"
-        else if builtins.isBool v then
-          (if v then "True" else "False")
-        else if builtins.isString v then
-          ''"${v}"''
-        else if builtins.isList v then
-          "[${concatStringsSep ", " (map formatValue v)}]"
-        else
-          builtins.toString v;
-    in
-    if builtins.isAttrs v then
-      concatStringsSep "\n" (mapAttrsToList (formatLine "${o}${n}.") v)
+  pythonize =
+    v:
+    if v == null then
+      "None"
+    else if builtins.isBool v then
+      (if v then "True" else "False")
+    else if builtins.isString v then
+      ''"${v}"''
+    else if builtins.isList v then
+      "[${concatStringsSep ", " (map pythonize v)}]"
     else
-      "${o}${n} = ${formatValue v}";
+      toString v;
 
   formatDictLine =
     o: n: v:
@@ -55,12 +47,25 @@ let
 
   formatQuickmarks = n: s: "${n} ${s}";
 
+  # flattenSettings attrset -> [ [ <opt_path> <opt_value>] ]
+  flattenSettings =
+    x:
+    lib.collect (x: !builtins.isAttrs x) (
+      lib.mapAttrsRecursive (path: value: [
+        (lib.concatStringsSep "." path)
+        value
+      ]) x
+    );
+
+  configSet = l: "config.set(${lib.concatStringsSep ", " (map pythonize l)})";
+
+  setUrlConfig = url: conf: map (x: configSet (x ++ [ url ])) (flattenSettings conf);
 in
 {
   options.programs.qutebrowser = {
     enable = lib.mkEnableOption "qutebrowser";
 
-    package = lib.mkPackageOption pkgs "qutebrowser" { };
+    package = lib.mkPackageOption pkgs "qutebrowser" { nullable = true; };
 
     aliases = mkOption {
       type = types.attrsOf types.str;
@@ -285,6 +290,27 @@ in
         Extra lines added to qutebrowser {file}`config.py` file.
       '';
     };
+
+    perDomainSettings = mkOption {
+      type = types.attrsOf types.anything;
+      default = { };
+      description = ''
+        Options to set, as in `settings` but per domain.
+        Refer to {option}`settings` for details.
+      '';
+      example = literalExpression ''
+        {
+          "zoom.us" = {
+            content = {
+              autoplay = true;
+              media.audio_capture = true;
+              media.video_capture = true;
+            };
+          };
+          "github.com".colors.webpage.darkmode.enabled = false;
+        };
+      '';
+    };
   };
 
   config =
@@ -293,13 +319,14 @@ in
         [
           (if cfg.loadAutoconfig then "config.load_autoconfig()" else "config.load_autoconfig(False)")
         ]
-        ++ mapAttrsToList (formatLine "c.") cfg.settings
+        ++ map configSet (flattenSettings cfg.settings)
         ++ mapAttrsToList (formatDictLine "c.aliases") cfg.aliases
         ++ mapAttrsToList (formatDictLine "c.url.searchengines") cfg.searchEngines
         ++ mapAttrsToList (formatDictLine "c.bindings.key_mappings") cfg.keyMappings
         ++ lib.optional (!cfg.enableDefaultBindings) "c.bindings.default = {}"
         ++ mapAttrsToList formatKeyBindings cfg.keyBindings
         ++ lib.optional (cfg.extraConfig != "") cfg.extraConfig
+        ++ lib.lists.flatten (mapAttrsToList setUrlConfig cfg.perDomainSettings)
       );
 
       quickmarksFile = lib.optionals (cfg.quickmarks != { }) concatStringsSep "\n" (
@@ -309,22 +336,20 @@ in
       greasemonkeyDir = lib.optionals (
         cfg.greasemonkey != [ ]
       ) pkgs.linkFarmFromDrvs "greasemonkey-userscripts" cfg.greasemonkey;
+
+      configDir =
+        if pkgs.stdenv.hostPlatform.isDarwin then
+          ".qutebrowser"
+        else
+          "${config.xdg.configHome}/qutebrowser";
     in
     mkIf cfg.enable {
-      home.packages = [ cfg.package ];
+      home.packages = lib.mkIf (cfg.package != null) [ cfg.package ];
 
-      home.file.".qutebrowser/config.py" = mkIf pkgs.stdenv.hostPlatform.isDarwin {
+      home.file."${configDir}/config.py" = {
         text = qutebrowserConfig;
-      };
-
-      home.file.".qutebrowser/quickmarks" =
-        mkIf (cfg.quickmarks != { } && pkgs.stdenv.hostPlatform.isDarwin)
-          {
-            text = quickmarksFile;
-          };
-
-      xdg.configFile."qutebrowser/config.py" = mkIf pkgs.stdenv.hostPlatform.isLinux {
-        text = qutebrowserConfig;
+      }
+      // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
         onChange = ''
           hash="$(echo -n "$USER" | md5sum | cut -d' ' -f1)"
           socket="''${XDG_RUNTIME_DIR:-/run/user/$UID}/qutebrowser/ipc-$hash"
@@ -344,22 +369,12 @@ in
         '';
       };
 
-      xdg.configFile."qutebrowser/quickmarks" =
-        mkIf (cfg.quickmarks != { } && pkgs.stdenv.hostPlatform.isLinux)
-          {
-            text = quickmarksFile;
-          };
+      home.file."${configDir}/quickmarks" = mkIf (cfg.quickmarks != { }) {
+        text = quickmarksFile;
+      };
 
-      home.file.".qutebrowser/greasemonkey" =
-        mkIf (cfg.greasemonkey != [ ] && pkgs.stdenv.hostPlatform.isDarwin)
-          {
-            source = greasemonkeyDir;
-          };
-
-      xdg.configFile."qutebrowser/greasemonkey" =
-        mkIf (cfg.greasemonkey != [ ] && pkgs.stdenv.hostPlatform.isLinux)
-          {
-            source = greasemonkeyDir;
-          };
+      home.file."${configDir}/greasemonkey" = mkIf (cfg.greasemonkey != [ ]) {
+        source = greasemonkeyDir;
+      };
     };
 }

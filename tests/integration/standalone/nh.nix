@@ -2,8 +2,6 @@
 
 let
 
-  inherit (pkgs.lib) escapeShellArg;
-
   home = "/home/alice";
 
 in
@@ -11,30 +9,28 @@ in
   name = "works-with-nh-stable";
   meta.maintainers = [ pkgs.lib.maintainers.rycee ];
 
-  nodes.machine =
-    { ... }:
-    {
-      imports = [ "${pkgs.path}/nixos/modules/installer/cd-dvd/channel.nix" ];
-      virtualisation.memorySize = 2048;
-      environment.systemPackages = [ pkgs.nh ];
-      nix = {
-        registry.home-manager.to = {
-          type = "path";
-          path = ../../..;
-        };
-        settings.extra-experimental-features = [
-          "nix-command"
-          "flakes"
-        ];
+  nodes.machine = {
+    imports = [ "${pkgs.path}/nixos/modules/installer/cd-dvd/channel.nix" ];
+    virtualisation.memorySize = 3072;
+    environment.systemPackages = [ pkgs.nh ];
+    nix = {
+      registry.home-manager.to = {
+        type = "path";
+        path = ../../..;
       };
-      users.users.alice = {
-        isNormalUser = true;
-        description = "Alice Foobar";
-        password = "foobar";
-        uid = 1000;
-        inherit home;
-      };
+      settings.extra-experimental-features = [
+        "nix-command"
+        "flakes"
+      ];
     };
+    users.users.alice = {
+      isNormalUser = true;
+      description = "Alice Foobar";
+      password = "foobar";
+      uid = 1000;
+      inherit home;
+    };
+  };
 
   testScript = ''
     import shlex
@@ -82,8 +78,11 @@ in
         "cp -v ${./alice-home-next.nix} ${home}/.config/home-manager/home.nix"
       ]))
 
+      # The default configuration creates this link on activation.
+      machine.fail("test -L '${home}/.cache/.keep'")
+
       actual = succeed_as_alice("nh home switch --no-nom '${home}/.config/home-manager'")
-      expected = "Starting Home Manager activation"
+      expected = "home-manager-generation.drv"
       assert expected in actual, \
         f"expected nh home switch to contain {expected}, but got {actual}"
 

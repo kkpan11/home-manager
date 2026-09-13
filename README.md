@@ -25,10 +25,11 @@ If you would like to contribute to Home Manager, then please have a look at
 Releases
 --------
 
-Home Manager is developed against `nixpkgs-unstable` branch, which often causes
-it to contain tweaks for changes/packages not yet released in stable [NixOS][].
+Home Manager is developed against the `nixpkgs-unstable` branch, which often
+causes it to contain tweaks for changes/packages not yet released in stable
+[NixOS][].
 To avoid breaking users' configurations, Home Manager is released in branches
-corresponding to NixOS releases (e.g. `release-24.11`). These branches get
+corresponding to NixOS releases (e.g. `release-26.05`). These branches get
 fixes, but usually not new modules. If you need a module to be backported, then
 feel free to open an issue.
 
@@ -45,18 +46,13 @@ and gradually make it more elaborate as you learn.
 
 In some cases Home Manager cannot detect whether it will overwrite a previous
 manual configuration. For example, the Gnome Terminal module will write to your
-dconf store and cannot tell whether a configuration that it is about to be
+dconf store and cannot tell whether a configuration that is about to be
 overwritten was from a previous Home Manager generation or from manual
 configuration.
 
-Home Manager targets [NixOS][] unstable and NixOS version 24.11 (the current
+Home Manager targets `nixpkgs-unstable` and NixOS version 26.05 (the current
 stable version), it may or may not work on other Linux distributions and NixOS
 versions.
-
-Also, the `home-manager` tool does not explicitly support rollbacks at the
-moment so if your home directory gets messed up you'll have to fix it yourself.
-See the [rollbacks][] section for instructions on how to manually perform a
-rollback.
 
 Now when your expectations have been built up and you are eager to try all this
 out you can go ahead and read the rest of this text.
@@ -124,5 +120,5 @@ This project is licensed under the terms of the [MIT license](LICENSE).
 [manual nixos install]: https://nix-community.github.io/home-manager/#sec-install-nixos-module
 [manual standalone install]: https://nix-community.github.io/home-manager/#sec-install-standalone
 [manual]: https://nix-community.github.io/home-manager/
-[nix-darwin]: https://github.com/LnL7/nix-darwin
+[nix-darwin]: https://github.com/nix-darwin/nix-darwin
 [rollbacks]: https://nix-community.github.io/home-manager/index.xhtml#sec-usage-rollbacks

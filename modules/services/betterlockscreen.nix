@@ -8,18 +8,13 @@ let
   cfg = config.services.betterlockscreen;
 in
 {
-  meta.maintainers = with lib.maintainers; [ sebtm ];
+  meta.maintainers = [ ];
 
   options = {
     services.betterlockscreen = {
       enable = lib.mkEnableOption "betterlockscreen, a screen-locker module";
 
-      package = lib.mkOption {
-        type = lib.types.package;
-        default = pkgs.betterlockscreen;
-        defaultText = lib.literalExpression "pkgs.betterlockscreen";
-        description = "Package providing {command}`betterlockscreen`.";
-      };
+      package = lib.mkPackageOption pkgs "betterlockscreen" { };
 
       arguments = lib.mkOption {
         type = lib.types.listOf lib.types.str;
@@ -46,7 +41,7 @@ in
 
     services.screen-locker = {
       enable = true;
-      inactiveInterval = cfg.inactiveInterval;
+      inherit (cfg) inactiveInterval;
       lockCmd = "${cfg.package}/bin/betterlockscreen --lock ${lib.concatStringsSep " " cfg.arguments}";
     };
   };

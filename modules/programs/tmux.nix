@@ -19,9 +19,11 @@ let
 
   pluginModule = types.submodule {
     options = {
-      plugin = mkOption {
-        type = types.package;
-        description = "Path of the configuration file to include.";
+      plugin = lib.mkPackageOption pkgs.tmuxPlugins "plugin" {
+        example = "pkgs.tmuxPlugins.sensible";
+        default = null;
+        pkgsText = "pkgs.tmuxPlugins";
+        extraDescription = "Path of the configuration file to include.";
       };
 
       extraConfig = mkOption {
@@ -55,7 +57,11 @@ let
       # We need to set default-shell before calling new-session
       set  -g default-shell "${cfg.shell}"
     ''}
-    ${optionalString cfg.newSession "new-session"}
+    ${optionalString cfg.newSession ''
+      # Use -A to make new-session idempotent: attach if session "0" exists,
+      # otherwise create it. This prevents duplicate sessions when multiple
+      # configs (e.g., system and user) both enable newSession.
+      new-session -A -s 0''}
 
     ${optionalString cfg.reverseSplit ''
       bind -N "Split the pane into two, left and right" v split-window -h
@@ -82,23 +88,17 @@ let
     ''}
 
     ${
-      if cfg.prefix != null then
-        ''
-          # rebind main key: ${cfg.prefix}
-          unbind C-${defaultShortcut}
-          set -g prefix ${cfg.prefix}
-          bind -N "Send the prefix key through to the application" \
-            ${cfg.prefix} send-prefix
-        ''
-      else
-        optionalString (cfg.shortcut != defaultShortcut) ''
-          # rebind main key: C-${cfg.shortcut}
-          unbind C-${defaultShortcut}
-          set -g prefix C-${cfg.shortcut}
-          bind -N "Send the prefix key through to the application" \
-            ${cfg.shortcut} send-prefix
-          bind C-${cfg.shortcut} last-window
-        ''
+      let
+        defaultPrefix = "C-${defaultShortcut}";
+        prefix = if cfg.prefix != null then cfg.prefix else "C-${cfg.shortcut}";
+      in
+      optionalString (prefix != defaultPrefix) ''
+        # rebind main key: ${prefix}
+        unbind ${defaultPrefix}
+        set -g prefix ${prefix}
+        bind -N "Send the prefix key through to the application" \
+          ${prefix} send-prefix
+      ''
     }
 
     ${optionalString cfg.disableConfirmationPrompt ''
@@ -193,7 +193,7 @@ in
       enable = mkEnableOption "tmux";
 
       escapeTime = mkOption {
-        default = 500;
+        default = 10;
         example = 0;
         type = types.ints.unsigned;
         description = ''
@@ -248,7 +248,7 @@ in
         '';
       };
 
-      package = lib.mkPackageOption pkgs "tmux" { };
+      package = lib.mkPackageOption pkgs "tmux" { nullable = true; };
 
       reverseSplit = mkOption {
         default = false;
@@ -300,13 +300,13 @@ in
 
       shell = mkOption {
         default = defaultShell;
-        example = literalExpression "${pkgs.zsh}/bin/zsh";
+        example = literalExpression "\${pkgs.zsh}/bin/zsh";
         type = with types; nullOr str;
         description = "Set the default-shell tmux variable.";
       };
 
       secureSocket = mkOption {
-        default = pkgs.stdenv.isLinux;
+        default = pkgs.stdenv.hostPlatform.isLinux;
         type = types.bool;
         description = ''
           Store tmux socket under {file}`/run`, which is more
@@ -316,8 +316,6 @@ in
       };
 
       tmuxp.enable = mkEnableOption "tmuxp";
-
-      tmuxinator.enable = mkEnableOption "tmuxinator";
 
       plugins = mkOption {
         type =
@@ -356,9 +354,7 @@ in
     lib.mkMerge [
       {
         home.packages =
-          [ cfg.package ]
-          ++ lib.optional cfg.tmuxinator.enable pkgs.tmuxinator
-          ++ lib.optional cfg.tmuxp.enable pkgs.tmuxp;
+          lib.optional (cfg.package != null) cfg.package ++ lib.optional cfg.tmuxp.enable pkgs.tmuxp;
       }
 
       { xdg.configFile."tmux/tmux.conf".text = lib.mkBefore tmuxConf; }

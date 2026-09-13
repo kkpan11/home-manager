@@ -218,8 +218,11 @@ in
         {
           Description = "${programName} colour temperature adjuster";
           Documentation = serviceDocumentation;
-          After =
-            [ "graphical-session.target" ] ++ (lib.optional cfg.tray "tray.target") ++ geoclueAgentService;
+          After = [
+            "graphical-session.target"
+          ]
+          ++ (lib.optional cfg.tray "tray.target")
+          ++ geoclueAgentService;
           Wants = geoclueAgentService;
           Requires = lib.mkIf cfg.tray "tray.target";
           PartOf = [ "graphical-session.target" ];
@@ -236,7 +239,7 @@ in
             configFullPath = config.xdg.configHome + "/${xdgConfigFilePath}";
           in
           "${cfg.package}/bin/${command} "
-          + lib.cli.toGNUCommandLineShell { } {
+          + lib.cli.toCommandLineShellGNU { } {
             v = cfg.enableVerboseLogging;
             c = configFullPath;
           };

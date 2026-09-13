@@ -22,33 +22,30 @@ let
   # See: https://github.com/nix-community/home-manager/issues/6663
   # and https://github.com/bnprks/mcfly-fzf/issues/10
 
-  bashIntegration =
-    ''
-      eval "$(${getExe cfg.package} init bash)"
-    ''
-    + optionalString cfg.fzf.enable ''
-      if [[ $- =~ i ]]; then
-        eval "$(${getExe cfg.mcflyFzfPackage} init bash)"
-      fi
-    '';
+  bashIntegration = ''
+    eval "$(${getExe cfg.package} init bash)"
+  ''
+  + optionalString cfg.fzf.enable ''
+    if [[ $- =~ i ]]; then
+      eval "$(${getExe cfg.mcflyFzfPackage} init bash)"
+    fi
+  '';
 
-  fishIntegration =
-    ''
-      ${getExe cfg.package} init fish | source
-    ''
-    + optionalString cfg.fzf.enable ''
-      ${getExe cfg.mcflyFzfPackage} init fish | source
-    '';
+  fishIntegration = ''
+    ${getExe cfg.package} init fish | source
+  ''
+  + optionalString cfg.fzf.enable ''
+    ${getExe cfg.mcflyFzfPackage} init fish | source
+  '';
 
-  zshIntegration =
-    ''
-      eval "$(${getExe cfg.package} init zsh)"
-    ''
-    + optionalString cfg.fzf.enable ''
-      if [[ -o interactive ]]; then
-      eval "$(${getExe cfg.mcflyFzfPackage} init zsh)"
-      fi
-    '';
+  zshIntegration = ''
+    eval "$(${getExe cfg.package} init zsh)"
+  ''
+  + optionalString cfg.fzf.enable ''
+    if [[ -o interactive ]]; then
+    eval "$(${getExe cfg.mcflyFzfPackage} init zsh)"
+    fi
+  '';
 
 in
 {
@@ -76,25 +73,23 @@ in
     mcflyFzfPackage = lib.mkPackageOption pkgs "mcfly-fzf" { };
 
     settings = mkOption {
-      type = tomlFormat.type;
+      inherit (tomlFormat) type;
       default = { };
-      example = lib.literalExpression ''
-        {
-          colors = {
-            menubar = {
-              bg = "black";
-              fg = "red";
-            };
-            darkmode = {
-              prompt = "cyan";
-              timing = "yellow";
-              results_selection_fg = "cyan";
-              results_selection_bg = "black";
-              results_selection_hl = "red";
-            };
+      example = {
+        colors = {
+          menubar = {
+            bg = "black";
+            fg = "red";
           };
-        }
-      '';
+          darkmode = {
+            prompt = "cyan";
+            timing = "yellow";
+            results_selection_fg = "cyan";
+            results_selection_bg = "black";
+            results_selection_hl = "red";
+          };
+        };
+      };
       description = ''
         Settings written to {file}`~/.config/mcfly/config.toml`.
 

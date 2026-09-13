@@ -1,11 +1,6 @@
 {
-  config,
-  lib,
-  pkgs,
-  ...
-}:
+  imports = [ ./stubs.nix ];
 
-{
   programs.mpv = {
     enable = true;
 

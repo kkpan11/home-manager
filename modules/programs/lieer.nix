@@ -15,7 +15,9 @@ let
 
   cfg = config.programs.lieer;
 
-  lieerAccounts = lib.filter (a: a.lieer.enable) (lib.attrValues config.accounts.email.accounts);
+  lieerAccounts = lib.filter (a: a.enable && a.lieer.enable) (
+    lib.attrValues config.accounts.email.accounts
+  );
 
   nonGmailAccounts = map (a: a.name) (lib.filter (a: a.flavor != "gmail.com") lieerAccounts);
 
@@ -250,25 +252,6 @@ in
 
   config = mkIf cfg.enable (
     lib.mkMerge [
-      (mkIf (missingNotmuchAccounts != [ ]) {
-        warnings = [
-          ''
-            lieer is enabled for the following email accounts, but notmuch is not:
-
-                ${concatStringsSep "\n    " missingNotmuchAccounts}
-
-            Notmuch can be enabled with:
-
-                ${concatStringsSep "\n    " notmuchConfigHelp}
-
-            If you have configured notmuch outside of Home Manager, you can suppress this
-            warning with:
-
-                programs.lieer.notmuchSetupWarning = false;
-          ''
-        ];
-      })
-
       {
         assertions = [
           {
@@ -295,6 +278,25 @@ in
 
         home.file = lib.listToAttrs (map configFile lieerAccounts);
       }
+
+      (mkIf (missingNotmuchAccounts != [ ]) {
+        warnings = [
+          ''
+            lieer is enabled for the following email accounts, but notmuch is not:
+
+                ${concatStringsSep "\n    " missingNotmuchAccounts}
+
+            Notmuch can be enabled with:
+
+                ${concatStringsSep "\n    " notmuchConfigHelp}
+
+            If you have configured notmuch outside of Home Manager, you can suppress this
+            warning with:
+
+                programs.lieer.notmuchSetupWarning = false;
+          ''
+        ];
+      })
     ]
   );
 }

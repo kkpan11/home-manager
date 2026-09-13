@@ -3,9 +3,10 @@
   config = {
     programs.ssh = {
       enable = true;
-      matchBlocks = {
+      enableDefaultConfig = false;
+      settings = {
         dynamicBindPathNoPort = {
-          dynamicForwards = [
+          DynamicForward = [
             {
               # OK:
               address = "/run/user/1000/gnupg/S.gpg-agent.extra";
@@ -14,7 +15,7 @@
         };
 
         dynamicBindAddressWithPort = {
-          dynamicForwards = [
+          DynamicForward = [
             {
               # OK:
               address = "127.0.0.1";

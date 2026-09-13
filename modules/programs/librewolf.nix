@@ -41,8 +41,6 @@ in
       platforms.darwin = {
         configPath = "Library/Application Support/LibreWolf";
       };
-
-      enableBookmarks = false;
     })
   ];
 
@@ -50,12 +48,10 @@ in
     settings = lib.mkOption {
       type = with lib.types; attrsOf (either bool (either int str));
       default = { };
-      example = lib.literalExpression ''
-        {
-          "webgl.disabled" = false;
-          "privacy.resistFingerprinting" = false;
-        }
-      '';
+      example = {
+        "webgl.disabled" = false;
+        "privacy.resistFingerprinting" = false;
+      };
       description = ''
         Attribute set of global LibreWolf settings and overrides. Refer to
         <https://librewolf.net/docs/settings/>
@@ -68,5 +64,10 @@ in
     home.file.".librewolf/librewolf.overrides.cfg" = lib.mkIf (cfg.settings != { }) {
       text = mkOverridesFile cfg.settings;
     };
+
+    mozilla.librewolfNativeMessagingHosts =
+      cfg.nativeMessagingHosts
+      # package configured native messaging hosts (entire browser actually)
+      ++ (lib.optional (cfg.finalPackage != null) cfg.finalPackage);
   };
 }

@@ -1,11 +1,4 @@
 {
-  config,
-  lib,
-  pkgs,
-  ...
-}:
-
-{
   services.mpdscribble = {
     enable = true;
     endpoints = {

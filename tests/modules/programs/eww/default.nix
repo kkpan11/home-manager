@@ -1,4 +1,5 @@
-{
-  eww-basic-config = ./basic-config.nix;
-  eww-null-config = ./null-config.nix;
+{ lib, pkgs, ... }:
+lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+  eww-basic-configuration = ./basic-configuration.nix;
+  eww-empty-settings = ./empty-settings.nix;
 }

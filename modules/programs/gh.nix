@@ -23,12 +23,10 @@ let
       aliases = mkOption {
         type = with types; attrsOf str;
         default = { };
-        example = literalExpression ''
-          {
-            co = "pr checkout";
-            pv = "pr view";
-          }
-        '';
+        example = {
+          co = "pr checkout";
+          pv = "pr view";
+        };
         description = ''
           Aliases that allow you to create nicknames for gh commands.
         '';
@@ -188,12 +186,15 @@ in
         fi
       '';
 
-    programs.git.extraConfig.credential = mkIf cfg.gitCredentialHelper.enable (
+    programs.git.settings.credential = mkIf cfg.gitCredentialHelper.enable (
       builtins.listToAttrs (
         map (
           host:
           lib.nameValuePair host {
-            helper = "${cfg.package}/bin/gh auth git-credential";
+            helper = [
+              ""
+              "${cfg.package}/bin/gh auth git-credential"
+            ];
           }
         ) cfg.gitCredentialHelper.hosts
       )
@@ -201,7 +202,7 @@ in
 
     xdg.dataFile."gh/extensions" = mkIf (cfg.extensions != [ ]) {
       source = pkgs.linkFarm "gh-extensions" (
-        builtins.map (p: {
+        map (p: {
           name = p.pname;
           path = "${p}/bin";
         }) cfg.extensions

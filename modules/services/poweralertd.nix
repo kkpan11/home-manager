@@ -6,30 +6,16 @@
 }:
 let
   inherit (lib) types;
-  inherit (lib.strings) toJSON;
 
   cfg = config.services.poweralertd;
-  escapeSystemdExecArg =
-    arg:
-    let
-      s =
-        if lib.isPath arg then
-          "${arg}"
-        else if lib.isString arg then
-          arg
-        else if lib.isInt arg || lib.isFloat arg || lib.isDerivation arg then
-          toString arg
-        else
-          throw "escapeSystemdExecArg only allows strings, paths, numbers and derivations";
-    in
-    lib.replaceStrings [ "%" "$" ] [ "%%" "$$" ] (toJSON s);
-  escapeSystemdExecArgs = lib.concatMapStringsSep " " escapeSystemdExecArg;
 in
 {
   meta.maintainers = [ lib.maintainers.thibautmarty ];
 
   options.services.poweralertd = {
     enable = lib.mkEnableOption "the Upower-powered power alertd";
+
+    package = lib.mkPackageOption pkgs "poweralertd" { };
 
     extraArgs = lib.mkOption {
       type = with types; listOf str;
@@ -61,7 +47,7 @@ in
 
       Service = {
         Type = "simple";
-        ExecStart = "${pkgs.poweralertd}/bin/poweralertd ${escapeSystemdExecArgs cfg.extraArgs}";
+        ExecStart = "${lib.getExe cfg.package} ${lib.hm.strings.escapeSystemdExecArgs cfg.extraArgs}";
         Restart = "always";
       };
     };

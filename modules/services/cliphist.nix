@@ -29,6 +29,8 @@ in
 
     package = lib.mkPackageOption pkgs "cliphist" { };
 
+    clipboardPackage = lib.mkPackageOption pkgs "wl-clipboard" { };
+
     allowImages = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -53,6 +55,7 @@ in
     systemdTargets = lib.mkOption {
       type = with lib.types; either (listOf str) str;
       default = [ config.wayland.systemd.target ];
+      defaultText = lib.literalExpression "[ config.wayland.systemd.target ]";
       example = "sway-session.target";
       description = ''
         The systemd targets that will automatically start the cliphist service.
@@ -86,7 +89,7 @@ in
 
         Service = {
           Type = "simple";
-          ExecStart = "${pkgs.wl-clipboard}/bin/wl-paste --watch ${cfg.package}/bin/cliphist ${extraOptionsStr} store";
+          ExecStart = "${lib.getExe' cfg.clipboardPackage "wl-paste"} --watch ${lib.getExe cfg.package} ${extraOptionsStr} store";
           Restart = "on-failure";
         };
 
@@ -104,7 +107,7 @@ in
 
         Service = {
           Type = "simple";
-          ExecStart = "${pkgs.wl-clipboard}/bin/wl-paste --type image --watch ${cfg.package}/bin/cliphist ${extraOptionsStr} store";
+          ExecStart = "${lib.getExe' cfg.clipboardPackage "wl-paste"} --type image --watch ${lib.getExe cfg.package} ${extraOptionsStr} store";
           Restart = "on-failure";
         };
 

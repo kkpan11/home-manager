@@ -27,19 +27,27 @@ let
       let
         idAttr = " id=\"${escape item.menuId}\"";
         labelAttr = if item ? label then " label=\"${escape item.label}\"" else "";
+        iconAttr = if item ? icon then " icon=\"${escape item.icon}\"" else "";
         children = if item ? items then lib.concatMapStringsSep "\n" generateMenu item.items else "";
+        executeAttr = if item ? execute then " execute=\"${escape item.execute}\"" else "";
+        outputMenu =
+          if item ? execute || children == "" then
+            "<menu${idAttr}${labelAttr}${iconAttr}${executeAttr} />"
+          else
+            "<menu${idAttr}${labelAttr}${iconAttr}${executeAttr}>\n${indent 1 children}\n</menu>";
       in
-      "<menu${idAttr}${labelAttr}>\n${indent 1 children}\n</menu>"
+      outputMenu
 
     else
       let
         labelAttr = " label=\"${escape item.label}\"";
-        action = item.action;
+        iconAttr = if item ? icon then " icon=\"${escape item.icon}\"" else "";
+        inherit (item) action;
         nameAttr = " name=\"${escape action.name}\"";
         toAttr = if action ? to then " to=\"${escape action.to}\"" else "";
         commandAttr = if action ? command then " command=\"${escape action.command}\"" else "";
       in
-      "<item${labelAttr}>\n  <action${nameAttr}${toAttr}${commandAttr} />\n</item>";
+      "<item${labelAttr}${iconAttr}>\n  <action${nameAttr}${toAttr}${commandAttr} />\n</item>";
 
   # Get keys in a preferred order
   orderedKeys =
@@ -90,7 +98,7 @@ let
               attrName = builtins.substring 1 999 k; # Remove "@" prefix
               attrValue = value.${k};
             in
-            " ${attrName}=\"${escape (builtins.toString attrValue)}\""
+            " ${attrName}=\"${escape (toString attrValue)}\""
           ) attrKeys
         );
 
@@ -117,7 +125,7 @@ let
 
     # All other primitive values: wrap in start/end tag
     else
-      "<${name}>${escape (builtins.toString value)}</${name}>";
+      "<${name}>${escape (toString value)}</${name}>";
 
   generateXML = name: config: extraConfig: ''
     <?xml version="1.0" encoding="UTF-8"?>
@@ -131,7 +139,7 @@ let
           else if name == "labwc_config" then
             lib.mapAttrsToList generateRc
           else
-            builtins.throw "error ${name} is neither openbox_menu nor labwc_config"
+            throw "error ${name} is neither openbox_menu nor labwc_config"
         )
           config
       )
@@ -142,5 +150,5 @@ let
 
 in
 {
-  generateXML = generateXML;
+  inherit generateXML;
 }

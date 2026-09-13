@@ -31,30 +31,51 @@ in
           id = 4;
           userChrome = pkgs.writeText "userChrome.css" (builtins.readFile ./chrome/userChrome.css);
         };
+        legacyUserPrCuSt-Disabled = {
+          id = 5;
+          userChrome = pkgs.writeText "userChrome.css" (builtins.readFile ./chrome/userChrome.css);
+          settings."toolkit.legacyUserProfileCustomizations.stylesheets" = false;
+        };
       };
     }
     // {
-      nmt.script = ''
-        assertFileRegex \
-          home-path/bin/${cfg.wrappedPackageName} \
-          MOZ_APP_LAUNCHER
+      nmt.script =
+        let
+          binPath =
+            if pkgs.stdenv.hostPlatform.isDarwin then
+              "Applications/${cfg.darwinAppName}.app/Contents/MacOS"
+            else
+              "bin";
+        in
+        ''
+          assertFileRegex \
+            "home-path/${binPath}/${cfg.finalPackage.meta.mainProgram}" \
+            MOZ_APP_LAUNCHER
 
-        assertDirectoryExists home-files/${cfg.configPath}/basic
+          assertDirectoryExists "home-files/${cfg.profilesPath}/basic"
 
-        assertFileContent \
-          home-files/${cfg.configPath}/lines/chrome/userChrome.css \
-          ${./chrome/userChrome.css}
+          assertFileContent \
+            "home-files/${cfg.profilesPath}/lines/chrome/userChrome.css" \
+            ${./chrome/userChrome.css}
 
-        assertFileContent \
-          home-files/${cfg.configPath}/file/chrome/userChrome.css \
-          ${./chrome/userChrome.css}
+          assertFileContent \
+            "home-files/${cfg.profilesPath}/file/chrome/userChrome.css" \
+            ${./chrome/userChrome.css}
 
-        assertPathNotExists \
-          home-files/${cfg.configPath}/derivation-file/chrome/extraFile.css
-        assertFileContent \
-          home-files/${cfg.configPath}/derivation-file/chrome/userChrome.css \
-          ${./chrome/userChrome.css}
-      '';
+          assertPathNotExists \
+            "home-files/${cfg.profilesPath}/derivation-file/chrome/extraFile.css"
+          assertFileContent \
+            "home-files/${cfg.profilesPath}/derivation-file/chrome/userChrome.css" \
+            ${./chrome/userChrome.css}
+
+          assertFileContains \
+            "home-files/${cfg.profilesPath}/lines/user.js" \
+            'user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);'
+
+          assertFileContains \
+              "home-files/${cfg.profilesPath}/legacyUserPrCuSt-Disabled/user.js" \
+              'user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", false);'
+        '';
     }
   );
 }

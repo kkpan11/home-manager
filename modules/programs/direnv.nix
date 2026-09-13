@@ -23,6 +23,12 @@ let
 
 in
 {
+  meta.maintainers = with lib.maintainers; [
+    khaneliman
+    rycee
+    shikanime
+  ];
+
   imports = [
     (mkRenamedOptionModule
       [
@@ -40,19 +46,13 @@ in
     ] "Flake support is now always enabled.")
   ];
 
-  meta.maintainers = with lib.maintainers; [
-    khaneliman
-    rycee
-    shikanime
-  ];
-
   options.programs.direnv = {
     enable = mkEnableOption "direnv, the environment switcher";
 
     package = mkPackageOption pkgs "direnv" { };
 
     config = mkOption {
-      type = tomlFormat.type;
+      inherit (tomlFormat) type;
       default = { };
       description = ''
         Configuration written to
@@ -75,34 +75,27 @@ in
 
     enableBashIntegration = lib.hm.shell.mkBashIntegrationOption { inherit config; };
 
-    enableFishIntegration =
-      lib.hm.shell.mkFishIntegrationOption {
-        inherit config;
-        extraDescription = ''
-          Note, enabling the direnv module will always activate its functionality
-          for Fish since the direnv package automatically gets loaded in Fish.
-          If this is not the case try adding
+    enableFishIntegration = lib.hm.shell.mkFishIntegrationOption { inherit config; };
 
-          ```nix
-          environment.pathsToLink = [ "/share/fish" ];
-          ```
-
-          to the system configuration.
-        '';
-      }
-      // {
-        default = true;
-        readOnly = true;
-      };
+    enableGitIntegration = mkEnableOption "Git integration" // {
+      description = ''
+        Whether to configure Git to globally ignore {file}`.direnv/`.
+      '';
+    };
 
     enableNushellIntegration = lib.hm.shell.mkNushellIntegrationOption { inherit config; };
 
     enableZshIntegration = lib.hm.shell.mkZshIntegrationOption { inherit config; };
 
     nix-direnv = {
-      enable = mkEnableOption ''
-        [nix-direnv](https://github.com/nix-community/nix-direnv),
-        a fast, persistent use_nix implementation for direnv'';
+      enable =
+        mkEnableOption ''
+          [nix-direnv](https://github.com/nix-community/nix-direnv),
+          a fast, persistent use_nix implementation for direnv''
+        // {
+          default = true;
+          example = false;
+        };
 
       package = mkPackageOption pkgs "nix-direnv" { };
     };
@@ -112,7 +105,7 @@ in
         [mise](https://mise.jdx.dev/direnv.html),
         integration of use_mise for direnv'';
 
-      package = mkPackageOption pkgs "mise" { };
+      package = mkPackageOption pkgs "mise" { nullable = true; };
     };
 
     silent = mkEnableOption "silent mode, that is, disabling direnv logging";
@@ -126,79 +119,101 @@ in
     mkIf cfg.enable {
       home.packages = [ cfg.package ];
 
-      xdg.configFile."direnv/direnv.toml" =
-        mkIf (cfg.config != { } || (cfg.silent && isVersion236orHigher))
-          {
-            source = tomlFormat.generate "direnv-config" (
-              cfg.config
-              // lib.optionalAttrs (cfg.silent && isVersion236orHigher) {
-                global = {
-                  log_format = "-";
-                  log_filter = "^$";
-                };
-              }
-            );
+      programs = {
+        direnv.config = {
+          global = mkIf (cfg.silent && isVersion236orHigher) {
+            log_format = "-";
+            log_filter = "^$";
           };
+        };
 
-      xdg.configFile."direnv/lib/hm-nix-direnv.sh" = mkIf cfg.nix-direnv.enable {
-        source = "${cfg.nix-direnv.package}/share/nix-direnv/direnvrc";
-      };
+        git.ignores = mkIf cfg.enableGitIntegration [
+          ".direnv/"
+        ];
 
-      xdg.configFile."direnv/direnvrc" = lib.mkIf (cfg.stdlib != "") { text = cfg.stdlib; };
+        bash.initExtra = mkIf cfg.enableBashIntegration (
+          # Using `mkAfter` to make it more likely to appear after other
+          # manipulations of the prompt.
+          mkAfter ''
+            eval "$(${getExe cfg.package} hook bash)"
+          ''
+        );
 
-      xdg.configFile."direnv/lib/hm-mise.sh" = mkIf cfg.mise.enable {
-        text = ''
-          eval "$(${getExe cfg.mise.package} direnv activate)"
+        fish.interactiveShellInit = mkIf cfg.enableFishIntegration (
+          # Using `mkAfter` to make it more likely to appear after other
+          # manipulations of the prompt.
+          mkAfter ''
+            if not functions -q __direnv_export_eval
+              ${getExe cfg.package} hook fish | source
+            end
+          ''
+        );
+
+        zsh.initContent = mkIf cfg.enableZshIntegration ''
+          eval "$(${getExe cfg.package} hook zsh)"
         '';
+
+        # Using `mkAfter` to make it more likely to appear after other
+        # manipulations of the prompt.
+        nushell.extraConfig = mkIf cfg.enableNushellIntegration (mkAfter ''
+          $env.config = ($env.config? | default {})
+          $env.config.hooks = ($env.config.hooks? | default {})
+          $env.config.hooks.pre_prompt = (
+              $env.config.hooks.pre_prompt?
+              | default []
+              | append {||
+                  let direnv = (
+                      ${getExe cfg.package} export json
+                      | from json --strict
+                      | default {}
+                  )
+
+                  for key in ($direnv | columns) {
+                      if ($direnv | get $key) == null {
+                          hide-env --ignore-errors $key
+                      }
+                  }
+
+                  $direnv
+                  | items {|key, value|
+                      let value = do (
+                          {
+                            "PATH": {
+                              from_string: {|s| $s | split row (char esep) | path expand --no-symlink }
+                              to_string: {|v| $v | path expand --no-symlink | str join (char esep) }
+                            }
+                          }
+                          | merge ($env.ENV_CONVERSIONS? | default {})
+                          | get ([[value, optional, insensitive]; [$key, true, true] [from_string, true, false]] | into cell-path)
+                          | if ($in | is-empty) { {|x| $x} } else { $in }
+                      ) $value
+                      return [ $key $value ]
+                  }
+                  | where {|pair| $pair.1 != null }
+                  | into record
+                  | load-env
+              }
+          )
+        '');
       };
 
-      programs.bash.initExtra = mkIf cfg.enableBashIntegration (
-        # Using mkAfter to make it more likely to appear after other
-        # manipulations of the prompt.
-        mkAfter ''
-          eval "$(${getExe cfg.package} hook bash)"
-        ''
-      );
+      xdg.configFile = {
+        "direnv/direnv.toml" = mkIf (cfg.config != { }) {
+          source = tomlFormat.generate "direnv-config" cfg.config;
+        };
 
-      programs.zsh.initContent = mkIf cfg.enableZshIntegration ''
-        eval "$(${getExe cfg.package} hook zsh)"
-      '';
+        "direnv/lib/hm-nix-direnv.sh" = mkIf cfg.nix-direnv.enable {
+          source = "${cfg.nix-direnv.package}/share/nix-direnv/direnvrc";
+        };
 
-      programs.fish.interactiveShellInit = mkIf cfg.enableFishIntegration (
-        # Using mkAfter to make it more likely to appear after other
-        # manipulations of the prompt.
-        mkAfter ''
-          ${getExe cfg.package} hook fish | source
-        ''
-      );
+        "direnv/direnvrc" = lib.mkIf (cfg.stdlib != "") { text = cfg.stdlib; };
 
-      # Using mkAfter to make it more likely to appear after other
-      # manipulations of the prompt.
-      programs.nushell.extraConfig = mkIf cfg.enableNushellIntegration (mkAfter ''
-        $env.config = ($env.config? | default {})
-        $env.config.hooks = ($env.config.hooks? | default {})
-        $env.config.hooks.pre_prompt = (
-            $env.config.hooks.pre_prompt?
-            | default []
-            | append {||
-                ${getExe cfg.package} export json
-                | from json --strict
-                | default {}
-                | items {|key, value|
-                    let value = do (
-                        $env.ENV_CONVERSIONS?
-                        | default {}
-                        | get -i $key
-                        | get -i from_string
-                        | default {|x| $x}
-                    ) $value
-                    return [ $key $value ]
-                }
-                | into record
-                | load-env
-            }
-        )
-      '');
+        "direnv/lib/hm-mise.sh" = mkIf cfg.mise.enable {
+          text = ''
+            eval "$(${if cfg.mise.package != null then getExe cfg.mise.package else "mise"} direnv activate)"
+          '';
+        };
+      };
 
       home.sessionVariables = lib.mkIf (cfg.silent && !isVersion236orHigher) { DIRENV_LOG_FORMAT = ""; };
     };

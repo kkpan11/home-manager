@@ -57,26 +57,17 @@ let
     '';
   };
 
-  makeBinPath =
-    packages:
-    lib.foldl (a: b: if a == "" then b else "${a}:${b}") "" (map (pkg: "${pkg}/bin") packages);
-
 in
 {
-  meta.maintainers = [ lib.hm.maintainers.iosmanthus ];
+  meta.maintainers = [ lib.maintainers.iosmanthus ];
 
   options.services.fusuma = {
     enable = lib.mkEnableOption "the fusuma systemd service to automatically enable touchpad gesture";
 
-    package = mkOption {
-      type = types.package;
-      default = pkgs.fusuma;
-      defaultText = literalExpression "pkgs.fusuma";
-      description = "Package providing {command}`fusuma`.";
-    };
+    package = lib.mkPackageOption pkgs "fusuma" { };
 
     settings = mkOption {
-      type = yamlFormat.type;
+      inherit (yamlFormat) type;
       example = literalExpression ''
         {
           threshold = {
@@ -105,11 +96,11 @@ in
       default = with pkgs; [
         xdotool
         coreutils
-        xorg.xprop
+        xprop
       ];
-      defaultText = literalExpression "pkgs.xdotool pkgs.coreutils pkgs.xorg.xprop";
+      defaultText = literalExpression "pkgs.xdotool pkgs.coreutils pkgs.xprop";
       example = literalExpression ''
-        with pkgs; [ xdotool coreutils xorg.xprop ];
+        with pkgs; [ xdotool coreutils xprop ];
       '';
       description = ''
         Extra packages needs to bring to the scope of fusuma service.
@@ -132,7 +123,7 @@ in
       };
 
       Service = {
-        Environment = with pkgs; "PATH=${makeBinPath cfg.extraPackages}";
+        Environment = "PATH=${lib.makeBinPath cfg.extraPackages}";
         ExecStart = "${cfg.package}/bin/fusuma";
       };
 

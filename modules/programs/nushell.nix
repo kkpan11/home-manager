@@ -9,12 +9,6 @@ let
   inherit (lib.hm.nushell) isNushellInline toNushell;
   cfg = config.programs.nushell;
 
-  configDir =
-    if pkgs.stdenv.isDarwin && !config.xdg.enable then
-      "Library/Application Support/nushell"
-    else
-      "${config.xdg.configHome}/nushell";
-
   linesOrSource =
     name:
     types.submodule (
@@ -45,15 +39,31 @@ let
 in
 {
   meta.maintainers = with lib.maintainers; [
-    Philipp-M
     joaquintrinanes
-    aidalgol
   ];
 
   options.programs.nushell = {
     enable = lib.mkEnableOption "nushell";
 
     package = lib.mkPackageOption pkgs "nushell" { nullable = true; };
+
+    configDir = lib.mkOption {
+      type = types.either types.str types.path;
+      default =
+        if pkgs.stdenv.hostPlatform.isDarwin && !config.xdg.enable then
+          "Library/Application Support/nushell"
+        else
+          "${config.xdg.configHome}/nushell";
+      defaultText = lib.literalExpression ''
+        if pkgs.stdenv.hostPlatform.isDarwin && !config.xdg.enable then
+          "Library/Application Support/nushell"
+        else
+          "''${config.xdg.configHome}/nushell";
+      '';
+      description = ''
+        Location of the nushell config directory. This directory contains the {file}`config.nu`, {file}`env.nu`, and {file}`login.nu` files, as well as history and plugin files.
+      '';
+    };
 
     configFile = lib.mkOption {
       type = types.nullOr (linesOrSource "config.nu");
@@ -212,18 +222,24 @@ in
 
     home.packages = lib.mkIf (cfg.package != null) [ cfg.package ];
 
+    home.extraDependencies = cfg.plugins; # make sure the plugins are not garbage-collected
+
     home.file = lib.mkMerge [
       (
         let
           writeConfig =
-            cfg.configFile != null || cfg.extraConfig != "" || aliasesStr != "" || cfg.settings != { };
+            cfg.configFile != null
+            || cfg.extraConfig != ""
+            || aliasesStr != ""
+            || cfg.settings != { }
+            || cfg.environmentVariables != { };
 
           aliasesStr = lib.concatLines (
             lib.mapAttrsToList (k: v: "alias ${toNushell { } k} = ${v}") cfg.shellAliases
           );
         in
         lib.mkIf writeConfig {
-          "${configDir}/config.nu".text = lib.mkMerge [
+          "${cfg.configDir}/config.nu".text = lib.mkMerge [
             (
               let
                 hasEnvVars = cfg.environmentVariables != { };
@@ -264,13 +280,13 @@ in
       )
 
       (lib.mkIf (cfg.envFile != null || cfg.extraEnv != "") {
-        "${configDir}/env.nu".text = lib.mkMerge [
+        "${cfg.configDir}/env.nu".text = lib.mkMerge [
           (lib.mkIf (cfg.envFile != null) cfg.envFile.text)
           cfg.extraEnv
         ];
       })
       (lib.mkIf (cfg.loginFile != null || cfg.extraLogin != "") {
-        "${configDir}/login.nu".text = lib.mkMerge [
+        "${cfg.configDir}/login.nu".text = lib.mkMerge [
           (lib.mkIf (cfg.loginFile != null) cfg.loginFile.text)
           cfg.extraLogin
         ];
@@ -280,6 +296,7 @@ in
         let
           msgPackz = pkgs.runCommand "nushellMsgPackz" { } ''
             mkdir -p "$out"
+            touch "$out/plugin.msgpackz"
             ${lib.getExe cfg.package} \
               --plugin-config "$out/plugin.msgpackz" \
               --commands '${
@@ -288,7 +305,7 @@ in
           '';
         in
         lib.mkIf ((cfg.package != null) && (cfg.plugins != [ ])) {
-          "${configDir}/plugin.msgpackz".source = "${msgPackz}/plugin.msgpackz";
+          "${cfg.configDir}/plugin.msgpackz".source = "${msgPackz}/plugin.msgpackz";
         }
       )
     ];

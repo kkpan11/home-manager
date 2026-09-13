@@ -4,7 +4,7 @@
     nmt.script =
       let
         dir =
-          if (pkgs.stdenv.isDarwin && !config.xdg.enable) then
+          if (pkgs.stdenv.hostPlatform.isDarwin && !config.xdg.enable) then
             "home-files/Library/Preferences/aerc"
           else
             "home-files/.config/aerc";
@@ -72,6 +72,18 @@
         "ui:account=Test" = {
           sidebar-width = 1337;
         };
+
+        # https://github.com/nix-community/home-manager/issues/6059
+        filters = ''
+          text/plain=colorize
+          text/calendar=calendar
+          message/delivery-status=colorize
+          message/rfc822=colorize
+          text/html=pandoc -f html -t plain | colorize
+          text/html=html | colorize
+          text/*=bat -fP --file-name="$AERC_FILENAME"
+          .headers=colorize
+        '';
       };
 
       stylesets = {
@@ -82,14 +94,20 @@
           error.fg = red
           header.bold = true
           title.reverse = true
+
+          [ui]
+          tab.selected.reverse = toggle
         '';
         default = {
-          "*.default" = "true";
-          "*error.bold" = "true";
-          "error.fg" = "red";
-          "header.bold" = "true";
-          "*.selected.reverse" = "toggle";
-          "title.reverse" = "true";
+          global = {
+            "*.default" = "true";
+            "*error.bold" = "true";
+            "error.fg" = "red";
+            "header.bold" = "true";
+            "*.selected.reverse" = "toggle";
+            "title.reverse" = "true";
+          };
+          ui."tab.selected.reverse" = "toggle";
         };
       };
 

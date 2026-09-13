@@ -165,15 +165,21 @@ in
       type =
         with types;
         let
-          valueType = either str (attrsOf valueType) // {
-            description = "attribute sets of strings";
-          };
+          valueType =
+            oneOf [
+              str
+              (attrsOf valueType)
+              (listOf valueType)
+            ]
+            // {
+              description = "attribute sets or lists of strings";
+            };
         in
         nullOr valueType;
       default = null;
-      example = literalExpression ''
-        { videolibrary.showemptytvshows = "true"; }
-      '';
+      example = {
+        videolibrary.showemptytvshows = "true";
+      };
       description = ''
         Configuration to write to the `advancedsettings.xml`
         file in kodis userdata directory. Settings specified here will be
@@ -231,9 +237,9 @@ in
     addonSettings = mkOption {
       type = with types; nullOr (attrsOf (attrsOf str));
       default = null;
-      example = literalExpression ''
-        { "service.xbmc.versioncheck".versioncheck_enable = "false"; }
-      '';
+      example = {
+        "service.xbmc.versioncheck".versioncheck_enable = "false";
+      };
       description = ''
         Attribute set with the plugin namespace as toplevel key and the plugins
         settings as lower level key/value pairs.

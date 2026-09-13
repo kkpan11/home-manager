@@ -11,8 +11,7 @@ let
   cfg = config.services.vdirsyncer;
 
   vdirsyncerOptions =
-    [ ]
-    ++ optional (cfg.verbosity != null) "--verbosity ${cfg.verbosity}"
+    optional (cfg.verbosity != null) "--verbosity ${cfg.verbosity}"
     ++ optional (cfg.configFile != null) "--config ${cfg.configFile}";
 
 in
@@ -22,13 +21,7 @@ in
   options.services.vdirsyncer = {
     enable = lib.mkEnableOption "vdirsyncer";
 
-    package = mkOption {
-      type = types.package;
-      default = pkgs.vdirsyncer;
-      defaultText = "pkgs.vdirsyncer";
-      example = lib.literalExpression "pkgs.vdirsyncer";
-      description = "The package to use for the vdirsyncer binary.";
-    };
+    package = lib.mkPackageOption pkgs "vdirsyncer" { };
 
     frequency = mkOption {
       type = types.str;
@@ -71,7 +64,7 @@ in
     systemd.user.services.vdirsyncer = {
       Unit = {
         Description = "vdirsyncer calendar&contacts synchronization";
-        PartOf = [ "network-online.target" ];
+        X-SwitchMethod = "keep-old";
       };
 
       Service = {

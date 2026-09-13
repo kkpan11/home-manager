@@ -10,16 +10,14 @@ let
 
 in
 {
-  meta.maintainers = [ lib.maintainers.adisbladis ];
+  meta.maintainers = [ ];
 
   options = {
     services.kdeconnect = {
       enable = lib.mkEnableOption "KDE connect";
-      package = lib.mkOption {
-        type = lib.types.package;
-        default = pkgs.kdePackages.kdeconnect-kde;
-        example = lib.literalExpression "pkgs.plasma5Packages.kdeconnect-kde";
-        description = "The KDE connect package to use";
+      package = lib.mkPackageOption pkgs.kdePackages "kdeconnect-kde" {
+        example = "pkgs.plasma5Packages.kdeconnect-kde";
+        pkgsText = "pkgs.kdePackages";
       };
 
       indicator = lib.mkOption {
@@ -32,11 +30,11 @@ in
 
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
-      home.packages = [ cfg.package ];
-
       assertions = [
         (lib.hm.assertions.assertPlatform "services.kdeconnect" pkgs lib.platforms.linux)
       ];
+
+      home.packages = [ cfg.package ];
 
       systemd.user.services.kdeconnect = {
         Unit = {
@@ -50,12 +48,7 @@ in
         };
 
         Service = {
-          Environment = [ "PATH=${config.home.profileDirectory}/bin" ];
-          ExecStart =
-            if lib.strings.versionAtLeast (lib.versions.majorMinor cfg.package.version) "24.05" then
-              "${cfg.package}/bin/kdeconnectd"
-            else
-              "${cfg.package}/libexec/kdeconnectd";
+          ExecStart = "${cfg.package}/bin/kdeconnectd";
           Restart = "on-abort";
         };
       };
@@ -82,7 +75,6 @@ in
         };
 
         Service = {
-          Environment = [ "PATH=${config.home.profileDirectory}/bin" ];
           ExecStart = "${cfg.package}/bin/kdeconnect-indicator";
           Restart = "on-abort";
         };

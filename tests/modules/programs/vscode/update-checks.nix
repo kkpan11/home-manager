@@ -1,7 +1,11 @@
-{ pkgs, ... }:
+package:
+
+{
+  pkgs,
+  ...
+}:
 
 let
-
   settingsPath =
     if pkgs.stdenv.hostPlatform.isDarwin then
       "Library/Application Support/Code/User/settings.json"
@@ -14,15 +18,12 @@ let
       "update.mode": "none"
     }
   '';
-
 in
+
 {
   programs.vscode = {
     enable = true;
-    package = pkgs.writeScriptBin "vscode" "" // {
-      pname = "vscode";
-      version = "1.75.0";
-    };
+    inherit package;
     profiles.default = {
       enableUpdateCheck = false;
       enableExtensionUpdateCheck = false;

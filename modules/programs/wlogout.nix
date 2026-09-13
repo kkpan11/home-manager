@@ -7,10 +7,8 @@
 
 let
   inherit (lib)
-    all
     filterAttrs
     isStorePath
-    literalExpression
     types
     ;
   inherit (lib.options) mkEnableOption mkPackageOption mkOption;
@@ -94,20 +92,18 @@ in
         Layout configuration for wlogout, see <https://github.com/ArtsyMacaw/wlogout#config>
         for supported values.
       '';
-      example = literalExpression ''
-        [
-          {
-            label = "shutdown";
-            action = "systemctl poweroff";
-            text = "Shutdown";
-            keybind = "s";
-          }
-        ]
-      '';
+      example = [
+        {
+          label = "shutdown";
+          action = "systemctl poweroff";
+          text = "Shutdown";
+          keybind = "s";
+        }
+      ];
     };
 
     style = mkOption {
-      type = nullOr (either path str);
+      type = nullOr (either path lines);
       default = null;
       description = ''
         CSS style of the bar.

@@ -25,16 +25,14 @@ in
           the onCalendar option. See
           {manpage}`systemd.time(7)`
           for more information about the format.
+
+          ${lib.hm.darwin.intervalDocumentation}
         '';
       };
     };
   };
 
   config = lib.mkIf serviceConfig.enable {
-    assertions = [
-      (lib.hm.assertions.assertPlatform "services.borgmatic" pkgs lib.platforms.linux)
-    ];
-
     systemd.user = {
       services.borgmatic = {
         Unit = {
@@ -80,6 +78,25 @@ in
           RandomizedDelaySec = "10m";
         };
         Install.WantedBy = [ "timers.target" ];
+      };
+    };
+
+    assertions = [
+      (lib.hm.darwin.assertInterval "services.borgmatic.frequency" serviceConfig.frequency pkgs)
+    ];
+
+    launchd.agents.borgmatic = {
+      enable = true;
+      config = {
+        ProgramArguments = [
+          (lib.getExe programConfig.package)
+          "--stats"
+          "--list"
+        ];
+        ProcessType = "Background";
+        StartCalendarInterval = lib.hm.darwin.mkCalendarInterval serviceConfig.frequency;
+        StandardOutPath = "${config.home.homeDirectory}/Library/Logs/borgmatic/launchd-stdout.log";
+        StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/borgmatic/launchd-stderr.log";
       };
     };
   };

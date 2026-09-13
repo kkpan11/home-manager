@@ -43,25 +43,21 @@ let
       str
     ];
 
-  bindingType = types.submodule (
-    { name, config, ... }:
-    {
-      options = {
-        key = mkOption {
-          type = types.str;
-          description = "Key to bind.";
-          example = "j";
-        };
-
-        command = mkOption {
-          type = with types; either str (listOf str);
-          description = "Command or sequence of commands to be executed.";
-          example = "scroll_down";
-        };
+  bindingType = types.submodule {
+    options = {
+      key = mkOption {
+        type = types.str;
+        description = "Key to bind.";
+        example = "j";
       };
-    }
-  );
 
+      command = mkOption {
+        type = with types; either str (listOf str);
+        description = "Command or sequence of commands to be executed.";
+        example = "scroll_down";
+      };
+    };
+  };
 in
 {
   meta.maintainers = [ lib.hm.maintainers.olmokramer ];
@@ -112,14 +108,30 @@ in
       type = types.listOf bindingType;
       default = [ ];
       description = "List of keybindings.";
-      example = literalExpression ''
-        [
-          { key = "j"; command = "scroll_down"; }
-          { key = "k"; command = "scroll_up"; }
-          { key = "J"; command = [ "select_item" "scroll_down" ]; }
-          { key = "K"; command = [ "select_item" "scroll_up" ]; }
-        ]
-      '';
+      example = [
+        {
+          key = "j";
+          command = "scroll_down";
+        }
+        {
+          key = "k";
+          command = "scroll_up";
+        }
+        {
+          key = "J";
+          command = [
+            "select_item"
+            "scroll_down"
+          ];
+        }
+        {
+          key = "K";
+          command = [
+            "select_item"
+            "scroll_up"
+          ];
+        }
+      ];
     };
   };
 

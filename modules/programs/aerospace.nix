@@ -10,6 +10,12 @@ let
 
   tomlFormat = pkgs.formats.toml { };
 
+  configPath =
+    if config.xdg.enable then
+      "${lib.removePrefix config.home.homeDirectory config.xdg.configHome}/aerospace/aerospace.toml"
+    else
+      ".aerospace.toml";
+
   # filterAttrsRecursive supporting lists, as well.
   filterListAndAttrsRecursive =
     pred: set:
@@ -37,223 +43,101 @@ let
   filterNulls = filterListAndAttrsRecursive (v: v != null);
 in
 {
-  meta.maintainers = with lib.hm.maintainers; [ damidoug ];
+  meta.maintainers = with lib.maintainers; [ damidoug ];
+
+  imports = [
+    (lib.mkRenamedOptionModule
+      [ "programs" "aerospace" "userSettings" ]
+      [ "programs" "aerospace" "settings" ]
+    )
+
+    (lib.mkRemovedOptionModule [
+      "programs"
+      "aerospace"
+      "extraConfig"
+    ] "This option has been removed. Please use 'programs.aerospace.settings' instead.")
+  ];
 
   options.programs.aerospace = {
     enable = lib.mkEnableOption "AeroSpace window manager";
 
     package = lib.mkPackageOption pkgs "aerospace" { nullable = true; };
 
-    userSettings = mkOption {
-      type = types.submodule {
-        freeformType = tomlFormat.type;
-        options = {
-          start-at-login = lib.mkOption {
-            type = types.bool;
-            default = false;
-            description = "Start AeroSpace at login.";
-          };
-          after-login-command = mkOption {
-            type = with types; listOf str;
-            default = [ ];
-            description = ''
-              You can use it to add commands that run after login to macOS user session.
-              'start-at-login' needs to be 'true' for 'after-login-command' to work.
-            '';
-          };
-          after-startup-command = mkOption {
-            type = with types; listOf str;
-            default = [ ];
-            description = ''
-              You can use it to add commands that run after AeroSpace startup.
-              'after-startup-command' is run after 'after-login-command'
-            '';
-            example = [ "layout tiles" ];
-          };
-          enable-normalization-flatten-containers = mkOption {
-            type = types.bool;
-            default = true;
-            description = ''Containers that have only one child are "flattened".'';
-          };
-          enable-normalization-opposite-orientation-for-nested-containers = mkOption {
-            type = types.bool;
-            default = true;
-            description = "Containers that nest into each other must have opposite orientations.";
-          };
-          accordion-padding = mkOption {
-            type = types.int;
-            default = 30;
-            description = "Padding between windows in an accordion container.";
-          };
-          default-root-container-layout = mkOption {
-            type = types.enum [
-              "tiles"
-              "accordion"
-            ];
-            default = "tiles";
-            description = "Default layout for the root container.";
-          };
-          default-root-container-orientation = mkOption {
-            type = types.enum [
-              "horizontal"
-              "vertical"
-              "auto"
-            ];
-            default = "auto";
-            description = "Default orientation for the root container.";
-          };
-          on-window-detected = mkOption {
-            type = types.listOf (
-              types.submodule {
-                options = {
-                  "if" = mkOption {
-                    type = types.submodule {
-                      options = {
-                        app-id = mkOption {
-                          type = with types; nullOr str;
-                          default = null;
-                          description = "The application ID to match (optional).";
-                        };
-                        workspace = mkOption {
-                          type = with types; nullOr str;
-                          default = null;
-                          description = "The workspace name to match (optional).";
-                        };
-                        window-title-regex-substring = mkOption {
-                          type = with types; nullOr str;
-                          default = null;
-                          description = "Substring to match in the window title (optional).";
-                        };
-                        app-name-regex-substring = mkOption {
-                          type = with types; nullOr str;
-                          default = null;
-                          description = "Regex substring to match the app name (optional).";
-                        };
-                        during-aerospace-startup = mkOption {
-                          type = with types; nullOr bool;
-                          default = null;
-                          description = "Whether to match during aerospace startup (optional).";
-                        };
-                      };
-                    };
-                    default = { };
-                    description = "Conditions for detecting a window.";
-                  };
-                  check-further-callbacks = mkOption {
-                    type = with types; nullOr bool;
-                    default = null;
-                    description = "Whether to check further callbacks after this rule (optional).";
-                  };
-                  run = mkOption {
-                    type =
-                      with types;
-                      oneOf [
-                        str
-                        (listOf str)
-                      ];
-                    example = [
-                      "move-node-to-workspace m"
-                      "resize-node"
-                    ];
-                    description = "Commands to execute when the conditions match (required).";
-                  };
-                };
-              }
-            );
-            default = [ ];
-            example = [
-              {
-                "if" = {
-                  app-id = "Another.Cool.App";
-                  workspace = "cool-workspace";
-                  window-title-regex-substring = "Title";
-                  app-name-regex-substring = "CoolApp";
-                  during-aerospace-startup = false;
-                };
-                check-further-callbacks = false;
-                run = [
-                  "move-node-to-workspace m"
-                  "resize-node"
-                ];
-              }
-            ];
-            description = "Commands to run every time a new window is detected with optional conditions.";
-          };
-          workspace-to-monitor-force-assignment = mkOption {
-            type =
-              with types;
-              nullOr (
-                attrsOf (oneOf [
-                  int
-                  str
-                  (listOf str)
-                ])
-              );
-            default = null;
-            description = ''
-              Map workspaces to specific monitors.
-              Left-hand side is the workspace name, and right-hand side is the monitor pattern.
-            '';
-            example = {
-              "1" = 1; # First monitor from left to right.
-              "2" = "main"; # Main monitor.
-              "3" = "secondary"; # Secondary monitor (non-main).
-              "4" = "built-in"; # Built-in display.
-              "5" = "^built-in retina display$"; # Regex for the built-in retina display.
-              "6" = [
-                "secondary"
-                "dell"
-              ]; # Match first pattern in the list.
-            };
-          };
-          on-focus-changed = mkOption {
-            type = with types; listOf str;
-            default = [ ];
-            example = [ "move-mouse monitor-lazy-center" ];
-            description = "Commands to run every time focused window or workspace changes.";
-          };
-          on-focused-monitor-changed = mkOption {
-            type = with types; listOf str;
-            default = [ "move-mouse monitor-lazy-center" ];
-            description = "Commands to run every time focused monitor changes.";
-          };
-          exec-on-workspace-change = mkOption {
-            type = with types; listOf str;
-            default = [ ];
-            example = [
-              "/bin/bash"
-              "-c"
-              "sketchybar --trigger aerospace_workspace_change FOCUSED=$AEROSPACE_FOCUSED_WORKSPACE"
-            ];
-            description = "Commands to run every time workspace changes.";
-          };
-          key-mapping.preset = mkOption {
-            type = types.enum [
-              "qwerty"
-              "dvorak"
-            ];
-            default = "qwerty";
-            description = "Keymapping preset.";
-          };
-        };
+    launchd = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Configure the launchd agent to manage the AeroSpace process.
+
+          The first time this is enabled, macOS will prompt you to allow this background
+          item in System Settings.
+
+          You can verify the service is running correctly from your terminal.
+          Run: `launchctl list | grep aerospace`
+
+          - A running process will show a Process ID (PID) and a status of 0, for example:
+            `12345	0	org.nix-community.home.aerospace`
+
+          - If the service has crashed or failed to start, the PID will be a dash and the
+            status will be a non-zero number, for example:
+            `-	1	org.nix-community.home.aerospace`
+
+          In case of failure, check the logs with `cat /tmp/aerospace.err.log`.
+
+          For more detailed service status, run `launchctl print gui/$(id -u)/org.nix-community.home.aerospace`.
+
+          NOTE: Enabling this option will configure AeroSpace to **not** manage its own
+          launchd agent. Specifically, it will set `start-at-login = false` and
+          `after-login-command = []` in the configuration file, as those are now handled
+          by Home Manager and launchd instead.
+        '';
       };
+      keepAlive = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Whether the launchd service should be kept alive.";
+      };
+    };
+
+    settings = mkOption {
+      inherit (tomlFormat) type;
       default = { };
-      example = lib.literalExpression ''
-        {
-          gaps = {
-            outer.left = 8;
-            outer.bottom = 8;
-            outer.top = 8;
-            outer.right = 8;
-          };
-          mode.main.binding = {
-            alt-h = "focus left";
-            alt-j = "focus down";
-            alt-k = "focus up";
-            alt-l = "focus right";
-          };
-        }
-      '';
+      example = {
+        gaps = {
+          outer.left = 8;
+          outer.bottom = 8;
+          outer.top = 8;
+          outer.right = 8;
+        };
+        mode.main.binding = {
+          alt-h = "focus left";
+          alt-j = "focus down";
+          alt-k = "focus up";
+          alt-l = "focus right";
+        };
+        on-window-detected = [
+          {
+            "if".app-id = "com.apple.finder";
+            run = "move-node-to-workspace 9";
+          }
+
+          {
+            "if" = {
+              app-id = "com.apple.systempreferences";
+              app-name-regex-substring = "settings";
+              window-title-regex-substring = "substring";
+              workspace = "workspace-name";
+              during-aerospace-startup = true;
+            };
+            check-further-callbacks = true;
+            run = [
+              "layout floating"
+              "move-node-to-workspace S"
+            ];
+          }
+        ];
+      };
       description = ''
         AeroSpace configuration, see
         <https://nikitabobko.github.io/AeroSpace/guide#configuring-aerospace>
@@ -265,13 +149,83 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       (lib.hm.assertions.assertPlatform "programs.aerospace" pkgs lib.platforms.darwin)
+
+      # 1. Fail if user sets start-at-login = true BUT launchd is disabled.
+      {
+        assertion =
+          !((lib.hasAttr "start-at-login" cfg.settings) && (cfg.settings."start-at-login" == true))
+          || (cfg.launchd.enable == true);
+        message = ''
+          You have set `programs.aerospace.settings."start-at-login" = true;`
+          but `programs.aerospace.launchd.enable` is false.
+
+          This tells AeroSpace to manage its own startup, which can conflict
+          with Home Manager.
+
+          To manage startup with Home Manager, please set
+          `programs.aerospace.launchd.enable = true;`
+          (You can leave `start-at-login = true` in your settings, it will be
+          correctly overridden).
+        '';
+      }
+
+      # 2. Fail if user sets after-login-command (in any case).
+      {
+        assertion =
+          !(
+            (lib.hasAttr "after-login-command" cfg.settings)
+            && (lib.isList cfg.settings."after-login-command")
+            && (cfg.settings."after-login-command" != [ ])
+          );
+        message = ''
+          You have set `programs.aerospace.settings."after-login-command"`.
+
+          This setting is not supported when using this Home Manager module,
+          as it either conflicts with the launchd service (if enabled)
+          or bypasses it (if disabled).
+
+          The correct way to run commands after AeroSpace starts is to use:
+          1. `programs.aerospace.launchd.enable = true;`
+          2. `programs.aerospace.settings."after-startup-command" = [ ... ];`
+        '';
+      }
     ];
 
     home = {
       packages = lib.mkIf (cfg.package != null) [ cfg.package ];
-      file.".config/aerospace/aerospace.toml".source = tomlFormat.generate "aerospace" (
-        filterNulls cfg.userSettings
-      );
+
+      file.${configPath} = lib.mkIf (cfg.settings != { }) {
+        source = tomlFormat.generate "aerospace" (
+          filterNulls (
+            cfg.settings
+            // {
+              # Override these to avoid launchd conflicts
+              start-at-login = false;
+              after-login-command = [ ];
+            }
+          )
+        );
+
+        onChange = lib.mkIf cfg.launchd.enable ''
+          echo "AeroSpace config changed, reloading..."
+          if ${lib.getExe cfg.package} list-modes --current >/dev/null 2>&1; then
+            ${lib.getExe cfg.package} reload-config
+          else
+            echo "AeroSpace is not running yet, skipping reload-config."
+          fi
+        '';
+      };
+    };
+
+    launchd.agents.aerospace = {
+      inherit (cfg.launchd) enable;
+      config = {
+        Program = "${cfg.package}/Applications/AeroSpace.app/Contents/MacOS/AeroSpace";
+        KeepAlive = cfg.launchd.keepAlive;
+        RunAtLoad = true;
+        StandardOutPath = "/tmp/aerospace.log";
+        StandardErrorPath = "/tmp/aerospace.err.log";
+      };
     };
   };
 }

@@ -10,6 +10,8 @@ let
   cfg = config.programs.ranger;
 in
 {
+  meta.maintainers = [ lib.hm.maintainers.fpob ];
+
   options.programs.ranger = {
     enable = lib.mkEnableOption "ranger file manager";
 
@@ -137,7 +139,7 @@ in
               description = ''
                 A command to run for the matching file.
               '';
-              example = literalExpression ''"${pkgs.vim}/bin/vim -- \"$@\""'';
+              example = literalExpression ''"''${pkgs.vim}/bin/vim -- \"$@\""'';
             };
           };
         }
@@ -204,6 +206,4 @@ in
       })
     ]
   );
-
-  meta.maintainers = [ lib.hm.maintainers.fpob ];
 }

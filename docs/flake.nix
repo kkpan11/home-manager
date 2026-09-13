@@ -11,9 +11,9 @@
 
   outputs =
     {
-      self,
       nixpkgs,
       scss-reset,
+      ...
     }:
     let
       supportedSystems = [
@@ -75,8 +75,7 @@
           pkgs = nixpkgs.legacyPackages.${system};
           docs = import ./default.nix {
             inherit pkgs lib;
-            release = releaseInfo.release;
-            isReleaseBranch = releaseInfo.isReleaseBranch;
+            inherit (releaseInfo) isReleaseBranch release;
           };
         in
         {

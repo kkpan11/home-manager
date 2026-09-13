@@ -8,9 +8,9 @@ let
   cfg = config.programs.nix-index;
 in
 {
-  meta.maintainers = [
-    lib.hm.maintainers.ambroisie
-    lib.maintainers.khaneliman
+  meta.maintainers = with lib.maintainers; [
+    ambroisie
+    khaneliman
   ];
 
   options.programs.nix-index = {
@@ -23,6 +23,8 @@ in
     enableFishIntegration = lib.hm.shell.mkFishIntegrationOption { inherit config; };
 
     enableZshIntegration = lib.hm.shell.mkZshIntegrationOption { inherit config; };
+
+    enableNushellIntegration = lib.hm.shell.mkNushellIntegrationOption { inherit config; };
   };
 
   config = lib.mkIf cfg.enable {
@@ -65,5 +67,9 @@ in
             ${wrapper} $argv
         end
       '';
+
+    programs.nushell.settings.hooks.command_not_found = lib.mkIf cfg.enableNushellIntegration (
+      lib.hm.nushell.mkNushellInline "source ${cfg.package}/etc/profile.d/command-not-found.nu"
+    );
   };
 }

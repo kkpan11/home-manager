@@ -1,11 +1,12 @@
 {
+  config,
   lib,
   options,
   realPkgs,
   ...
 }:
 
-{
+lib.mkIf config.test.enableLegacyIfd {
   programs.kitty = {
     enable = true;
     theme = "Space Gray Eighties";
@@ -20,7 +21,7 @@
     )
   ];
 
-  nixpkgs.overlays = [ (self: super: { inherit (realPkgs) kitty-themes; }) ];
+  nixpkgs.overlays = [ (_self: _super: { inherit (realPkgs) kitty-themes; }) ];
 
   nmt.script = ''
     assertFileExists home-files/.config/kitty/kitty.conf

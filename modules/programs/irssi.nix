@@ -186,6 +186,8 @@ in
     programs.irssi = {
       enable = lib.mkEnableOption "the Irssi chat client";
 
+      package = lib.mkPackageOption pkgs "irssi" { nullable = true; };
+
       extraConfig = mkOption {
         default = "";
         description = "These lines are appended to the Irssi configuration.";
@@ -204,21 +206,19 @@ in
 
       networks = mkOption {
         default = { };
-        example = lib.literalExpression ''
-          {
-            liberachat = {
-              nick = "hmuser";
-              server = {
-                address = "irc.libera.chat";
-                port = 6697;
-                autoConnect = true;
-              };
-              channels = {
-                nixos.autoJoin = true;
-              };
+        example = {
+          liberachat = {
+            nick = "hmuser";
+            server = {
+              address = "irc.libera.chat";
+              port = 6697;
+              autoConnect = true;
             };
-          }
-        '';
+            channels = {
+              nixos.autoJoin = true;
+            };
+          };
+        };
         description = "An attribute set of chat networks.";
         type = types.attrsOf networkType;
       };
@@ -226,7 +226,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    home.packages = [ pkgs.irssi ];
+    home.packages = lib.mkIf (cfg.package != null) [ cfg.package ];
 
     home.file.".irssi/config".text = ''
       settings = {

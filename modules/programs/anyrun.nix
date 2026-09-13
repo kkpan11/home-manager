@@ -6,9 +6,7 @@
 }:
 let
   inherit (builtins)
-    map
     toJSON
-    toString
     substring
     stringLength
     ;
@@ -127,6 +125,14 @@ in
           '';
         };
 
+        margin = mkOption {
+          type = int;
+          default = 0;
+          description = ''
+            Add a margin around the window to allow for CSS shadow styling.
+          '';
+        };
+
         hideIcons = mkOption {
           type = bool;
           default = false;
@@ -177,7 +183,7 @@ in
 
     extraCss = mkOption {
       type = nullOr lines;
-      default = "";
+      default = null;
       description = ''
         Extra CSS lines to add to {file}`~/.config/anyrun/style.css`.
       '';
@@ -259,6 +265,7 @@ in
               y: ${stringifyNumeric cfg.config.y},
               width: ${stringifyNumeric cfg.config.width},
               height: ${stringifyNumeric cfg.config.height},
+              margin: ${toString cfg.config.margin},
               hide_icons: ${boolToString cfg.config.hideIcons},
               ignore_exclusive_zones: ${boolToString cfg.config.ignoreExclusiveZones},
               layer: ${capitalize cfg.config.layer},

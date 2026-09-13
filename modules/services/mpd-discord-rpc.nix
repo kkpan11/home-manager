@@ -16,29 +16,22 @@ in
     enable = lib.mkEnableOption "the mpd-discord-rpc service";
 
     settings = lib.mkOption {
-      type = tomlFormat.type;
+      inherit (tomlFormat) type;
       default = { };
-      example = lib.literalExpression ''
-        {
-          hosts = [ "localhost:6600" ];
-          format = {
-            details = "$title";
-            state = "On $album by $artist";
-          };
-        }
-      '';
+      example = {
+        hosts = [ "localhost:6600" ];
+        format = {
+          details = "$title";
+          state = "On $album by $artist";
+        };
+      };
       description = ''
         Configuration included in `config.toml`.
         For available options see <https://github.com/JakeStanger/mpd-discord-rpc#configuration>
       '';
     };
 
-    package = lib.mkOption {
-      type = lib.types.package;
-      default = pkgs.mpd-discord-rpc;
-      defaultText = lib.literalExpression "pkgs.mpd-discord-rpc";
-      description = "mpd-discord-rpc package to use.";
-    };
+    package = lib.mkPackageOption pkgs "mpd-discord-rpc" { };
   };
 
   config = lib.mkIf cfg.enable {

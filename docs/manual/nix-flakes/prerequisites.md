@@ -8,12 +8,7 @@
         and rebuild your system.
 
         ``` nix
-        nix = {
-          package = pkgs.nixFlakes;
-          extraOptions = ''
-            experimental-features = nix-command flakes
-          '';
-        };
+        nix.settings.experimental-features = "nix-command flakes";
         ```
 
     -   If you are not using NixOS, add the following to `nix.conf`
@@ -38,5 +33,5 @@
 
     Unlike the channel-based setup, `home.nix` will be evaluated when
     the flake is built, so it must be present before bootstrap of Home
-    Manager from the flake. See [Configuration Example](#sec-usage-configuration) for
+    Manager from the flake. See [Configuration Example](../usage/configuration.md#sec-usage-configuration) for
     introduction about writing a Home Manager configuration.

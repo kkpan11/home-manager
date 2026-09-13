@@ -21,15 +21,25 @@
   nmt.script =
     let
       configFile =
-        if pkgs.stdenv.isDarwin && !config.xdg.enable then
+        if pkgs.stdenv.hostPlatform.isDarwin && !config.xdg.enable then
           "home-files/Library/Application Support/nushell/config.nu"
         else
           "home-files/.config/nushell/config.nu";
     in
     ''
       assertFileExists "${configFile}"
-      assertFileRegex \
-        "${configFile}" \
-        'source /nix/store/[^/]*-oh-my-posh-nushell-config.nu'
+      ${
+        if (lib.versionAtLeast (lib.versions.major config.programs.oh-my-posh.package.version) "26") then
+          ''
+            assertFileContains \
+                    "${configFile}" \
+                    "/bin/oh-my-posh init nu --config"''
+        else
+
+          ''
+            assertFileRegex \
+                    "${configFile}" \
+                    "source /nix/store/[^/]*-oh-my-posh-nushell-config.nu"''
+      }
     '';
 }

@@ -1,6 +1,7 @@
 {
   pkgs ? import <nixpkgs> { },
   enableBig ? true,
+  enableLegacyIfd ? false,
 }:
 
 let
@@ -35,24 +36,27 @@ let
           buildHost = value;
           hostTarget = value;
         };
+      }
+      // lib.optionalAttrs (value ? override && lib.isFunction value.override) {
+        override = args: scrubDerivation name (value.override args);
+      }
+      // lib.optionalAttrs (value ? overrideAttrs && lib.isFunction value.overrideAttrs) {
+        overrideAttrs = f: scrubDerivation name (value.overrideAttrs f);
       };
     in
     if lib.isAttrs value then
       if lib.isDerivation value then scrubbedValue // newDrvAttrs else scrubbedValue
     else
       value;
-  scrubDerivations =
-    attrs:
-    let
-    in
-    lib.mapAttrs scrubDerivation attrs;
+  scrubDerivations = lib.mapAttrs scrubDerivation;
 
   # Globally unscrub a few selected packages that are used by a wide selection of tests.
   whitelist =
     let
-      inner = self: super: {
+      inner = _self: super: {
         inherit (pkgs)
           coreutils
+          crudini
           jq
           desktop-file-utils
           diffutils
@@ -66,9 +70,12 @@ let
           # Needed by pretty much all tests that have anything to do with fish.
           babelfish
           fish
+          lndir
           ;
 
-        xorg = super.xorg.overrideScope (self: super: { inherit (pkgs.xorg) lndir; });
+        python3Packages = super.python3Packages.overrideScope (
+          _self: _super: { inherit (pkgs.python3Packages) json5; }
+        );
       };
 
       outer =
@@ -87,12 +94,12 @@ let
     # TODO: fix darwin stdenv stubbing
     if isDarwin then
       let
-        rawPkgs = lib.makeExtensible (final: pkgs);
+        rawPkgs = lib.makeExtensible (_final: pkgs);
       in
       builtins.traceVerbose "eval scrubbed darwin nixpkgs" (rawPkgs.extend darwinScrublist)
     else
       let
-        rawScrubbedPkgs = lib.makeExtensible (final: scrubDerivations pkgs);
+        rawScrubbedPkgs = lib.makeExtensible (_final: scrubDerivations pkgs);
       in
       builtins.traceVerbose "eval scrubbed nixpkgs" (rawScrubbedPkgs.extend whitelist);
 
@@ -113,15 +120,12 @@ let
             pkgs =
               let
                 overlays =
-                  config.test.stubOverlays
-                  ++ lib.optionals (
-                    config.nixpkgs.overlays != null && config.nixpkgs.overlays != [ ]
-                  ) config.nixpkgs.overlays;
+                  config.test.stubOverlays ++ lib.optionals (config.nixpkgs.overlays != null) config.nixpkgs.overlays;
                 stubbedPkgs =
                   if overlays == [ ] then
                     scrubbedPkgs
                   else
-                    builtins.traceVerbose "eval overlayed nixpkgs" (lib.foldr (o: p: p.extend o) scrubbedPkgs overlays);
+                    builtins.traceVerbose "eval overlaid nixpkgs" (lib.foldr (o: p: p.extend o) scrubbedPkgs overlays);
               in
               lib.mkImageMediaOverride stubbedPkgs;
           };
@@ -135,6 +139,13 @@ let
             stateVersion = lib.mkDefault "18.09";
           };
 
+          # NOTE: Added 2025-12-27
+          # Avoid option change deprecation warning
+          # Remove after deprecation period
+          programs.zsh.dotDir = lib.mkIf (config.home.stateVersion == "18.09") (
+            lib.mkDefault "/home/hm-user"
+          );
+
           # Avoid including documentation since this will cause
           # unnecessary rebuilds of the tests.
           manual.manpages.enable = lib.mkDefault false;
@@ -146,13 +157,13 @@ let
           ];
 
           test.enableBig = enableBig;
+          test.enableLegacyIfd = enableLegacyIfd;
         }
       )
     ];
 
-  isDarwin = pkgs.stdenv.hostPlatform.isDarwin;
-  isLinux = pkgs.stdenv.hostPlatform.isLinux;
-
+  inherit (pkgs.stdenv.hostPlatform) isDarwin;
+  inherit (pkgs.stdenv.hostPlatform) isLinux;
 in
 import nmtSrc {
   inherit lib pkgs modules;
@@ -160,338 +171,78 @@ import nmtSrc {
     "home"
     "activationPackage"
   ];
-  tests = builtins.foldl' (a: b: a // (import b)) { } (
-    [
-      ./lib/generators
-      ./lib/types
-      ./modules/files
-      ./modules/home-environment
-      ./modules/misc/fontconfig
-      ./modules/misc/manual
-      ./modules/misc/nix
-      ./modules/misc/specialisation
-      ./modules/misc/xdg
-      ./modules/programs/aerc
-      ./modules/programs/alacritty
-      ./modules/programs/alot
-      ./modules/programs/antidote
-      ./modules/programs/aria2
-      ./modules/programs/atuin
-      ./modules/programs/autojump
-      ./modules/programs/bacon
-      ./modules/programs/bash
-      ./modules/programs/bat
-      ./modules/programs/borgmatic
-      ./modules/programs/bottom
-      ./modules/programs/broot
-      ./modules/programs/browserpass
-      ./modules/programs/btop
-      ./modules/programs/carapace
-      ./modules/programs/cava
-      ./modules/programs/clock-rs
-      ./modules/programs/cmus
-      ./modules/programs/comodoro
-      ./modules/programs/darcs
-      ./modules/programs/dircolors
-      ./modules/programs/direnv
-      ./modules/programs/earthly
-      ./modules/programs/emacs
-      ./modules/programs/eza
-      ./modules/programs/fastfetch
-      ./modules/programs/feh
-      ./modules/programs/fish
-      ./modules/programs/gallery-dl
-      ./modules/programs/gh
-      ./modules/programs/gh-dash
-      ./modules/programs/ghostty
-      ./modules/programs/git
-      ./modules/programs/git-cliff
-      ./modules/programs/git-credential-oauth
-      ./modules/programs/git-worktree-switcher
-      ./modules/programs/go
-      ./modules/programs/gpg
-      ./modules/programs/gradle
-      ./modules/programs/granted
-      ./modules/programs/helix
-      ./modules/programs/himalaya
-      ./modules/programs/htop
-      ./modules/programs/hyfetch
-      ./modules/programs/i3status
-      ./modules/programs/inori
-      ./modules/programs/irssi
-      ./modules/programs/jujutsu
-      ./modules/programs/joplin-desktop
-      ./modules/programs/jqp
-      ./modules/programs/k9s
-      ./modules/programs/kakoune
-      ./modules/programs/keepassxc
-      ./modules/programs/khal
-      ./modules/programs/khard
-      ./modules/programs/kitty
-      ./modules/programs/kubecolor
-      ./modules/programs/lapce
-      ./modules/programs/ledger
-      ./modules/programs/lazydocker
-      ./modules/programs/less
-      ./modules/programs/lesspipe
-      ./modules/programs/lf
-      ./modules/programs/lsd
-      ./modules/programs/lieer
-      ./modules/programs/man
-      ./modules/programs/mbsync
-      ./modules/programs/mergiraf
-      ./modules/programs/micro
-      ./modules/programs/mise
-      ./modules/programs/mods
-      ./modules/programs/mpv
-      ./modules/programs/mu
-      ./modules/programs/mujmap
-      ./modules/programs/ncmpcpp
-      ./modules/programs/ne
-      ./modules/programs/neomutt
-      ./modules/programs/neovide
-      ./modules/programs/neovim
-      ./modules/programs/newsboat
-      ./modules/programs/nheko
-      ./modules/programs/nix-index
-      ./modules/programs/nix-init
-      ./modules/programs/nix-your-shell
-      ./modules/programs/nnn
-      ./modules/programs/nushell
-      ./modules/programs/oh-my-posh
-      ./modules/programs/onlyoffice
-      ./modules/programs/openstackclient
-      ./modules/programs/pandoc
-      ./modules/programs/papis
-      ./modules/programs/pay-respects
-      ./modules/programs/pet
-      ./modules/programs/pistol
-      ./modules/programs/pls
-      ./modules/programs/poetry
-      ./modules/programs/powerline-go
-      ./modules/programs/pubs
-      ./modules/programs/pyenv
-      ./modules/programs/qcal
-      ./modules/programs/qutebrowser
-      ./modules/programs/ranger
-      ./modules/programs/readline
-      ./modules/programs/rio
-      ./modules/programs/ripgrep
-      ./modules/programs/ripgrep-all
-      ./modules/programs/rmpc
-      ./modules/programs/ruff
-      ./modules/programs/sagemath
-      ./modules/programs/sapling
-      ./modules/programs/sbt
-      ./modules/programs/scmpuff
-      ./modules/programs/senpai
-      ./modules/programs/sesh
-      ./modules/programs/sftpman
-      ./modules/programs/sioyek
-      ./modules/programs/sm64ex
-      ./modules/programs/smug
-      ./modules/programs/spotify-player
-      ./modules/programs/ssh
-      ./modules/programs/starship
-      ./modules/programs/streamlink
-      ./modules/programs/superfile
-      ./modules/programs/taskwarrior
-      ./modules/programs/tealdeer
-      ./modules/programs/television
-      ./modules/programs/tex-fmt
-      ./modules/programs/texlive
-      ./modules/programs/thefuck
-      ./modules/programs/thunderbird
-      ./modules/programs/tmate
-      ./modules/programs/tmux
-      ./modules/programs/topgrade
-      ./modules/programs/translate-shell
-      ./modules/programs/uv
-      ./modules/programs/vifm
-      ./modules/programs/vim-vint
-      ./modules/programs/vscode
-      ./modules/programs/wallust
-      ./modules/programs/watson
-      ./modules/programs/wezterm
-      ./modules/programs/yazi
-      ./modules/programs/zed-editor
-      ./modules/programs/zellij
-      ./modules/programs/zk
-      ./modules/programs/zplug
-      ./modules/programs/zsh
-      ./modules/services/gpg-agent
-      ./modules/services/syncthing/common
-      ./modules/xresources
-    ]
-    ++ lib.optionals isDarwin [
-      ./modules/launchd
-      ./modules/programs/aerospace
-      ./modules/services/emacs-darwin
-      ./modules/services/espanso-darwin
-      ./modules/services/git-sync-darwin
-      ./modules/services/imapnotify-darwin
-      ./modules/services/jankyborders
-      ./modules/services/macos-remap-keys
-      ./modules/services/nix-gc-darwin
-      ./modules/services/ollama/darwin
-      ./modules/services/skhd
-      ./modules/services/yubikey-agent-darwin
-      ./modules/targets-darwin
-    ]
-    ++ lib.optionals isLinux [
-      ./modules/misc/xdg/linux.nix
-      ./modules/config/home-cursor
-      ./modules/config/i18n
-      ./modules/i18n/input-method
-      ./modules/misc/debug
-      ./modules/misc/editorconfig
-      ./modules/misc/gtk
-      ./modules/misc/numlock
-      ./modules/misc/pam
-      ./modules/misc/qt
-      ./modules/misc/xsession
-      ./modules/programs/abook
-      ./modules/programs/anyrun
-      ./modules/programs/autorandr
-      ./modules/programs/awscli
-      ./modules/programs/beets # One test relies on services.mpd
-      ./modules/programs/bemenu
-      ./modules/programs/boxxy
-      ./modules/programs/cavalier
-      ./modules/programs/distrobox
-      ./modules/programs/eww
-      ./modules/programs/firefox
-      ./modules/programs/firefox/firefox.nix
-      ./modules/programs/firefox/floorp.nix
-      ./modules/programs/firefox/librewolf.nix
-      ./modules/programs/foot
-      ./modules/programs/freetube
-      ./modules/programs/fuzzel
-      ./modules/programs/getmail
-      ./modules/programs/gnome-shell
-      ./modules/programs/gnome-terminal
-      ./modules/programs/hexchat
-      ./modules/programs/hyprlock
-      ./modules/programs/i3blocks
-      ./modules/programs/i3status-rust
-      ./modules/programs/imv
-      ./modules/programs/kodi
-      ./modules/programs/kickoff
-      ./modules/programs/looking-glass-client
-      ./modules/programs/mangohud
-      ./modules/programs/mpvpaper
-      ./modules/programs/ncmpcpp-linux
-      ./modules/programs/nh
-      ./modules/programs/onedrive
-      ./modules/programs/pqiv
-      ./modules/programs/rbw
-      ./modules/programs/rofi
-      ./modules/programs/rofi-pass
-      ./modules/programs/swayimg
-      ./modules/programs/swaylock
-      ./modules/programs/swayr
-      ./modules/programs/terminator
-      ./modules/programs/tofi
-      ./modules/programs/vesktop
-      ./modules/programs/vinegar
-      ./modules/programs/waybar
-      ./modules/programs/wlogout
-      ./modules/programs/wofi
-      ./modules/programs/xmobar
-      ./modules/programs/yambar
-      ./modules/programs/yt-dlp
-      ./modules/services/activitywatch
-      ./modules/services/avizo
-      ./modules/services/barrier
-      ./modules/services/blanket
-      ./modules/services/borgmatic
-      ./modules/services/cachix-agent
-      ./modules/services/cliphist
-      ./modules/services/clipman
-      ./modules/services/clipse
-      ./modules/services/comodoro
-      ./modules/services/copyq
-      ./modules/services/conky
-      ./modules/services/darkman
-      ./modules/services/davmail
-      ./modules/services/devilspie2
-      ./modules/services/dropbox
-      ./modules/services/easyeffects
-      ./modules/services/emacs
-      ./modules/services/espanso
-      ./modules/services/flameshot
-      ./modules/services/fluidsynth
-      ./modules/services/fnott
-      ./modules/services/fusuma
-      ./modules/services/git-sync
-      ./modules/services/glance
-      ./modules/services/gromit-mpx
-      ./modules/services/home-manager-auto-expire
-      ./modules/services/home-manager-auto-upgrade
-      ./modules/services/hypridle
-      ./modules/services/hyprpaper
-      ./modules/services/hyprpolkitagent
-      ./modules/services/hyprsunset
-      ./modules/services/imapnotify
-      ./modules/services/kanshi
-      ./modules/services/lieer
-      ./modules/services/linux-wallpaperengine
-      ./modules/services/lxqt-policykit-agent
-      ./modules/services/mopidy
-      ./modules/services/mpd
-      ./modules/services/mpd-mpris
-      ./modules/services/mpdris2
-      ./modules/services/mpdscribble
-      ./modules/services/nix-gc
-      ./modules/services/ollama/linux
-      ./modules/services/osmscout-server
-      ./modules/services/pantalaimon
-      ./modules/services/parcellite
-      ./modules/services/pass-secret-service
-      ./modules/services/pasystray
-      ./modules/services/pbgopy
-      ./modules/services/picom
-      ./modules/services/playerctld
-      ./modules/services/podman-linux
-      ./modules/services/polkit-gnome
-      ./modules/services/polybar
-      ./modules/services/recoll
-      ./modules/services/redshift-gammastep
-      ./modules/services/remmina
-      ./modules/services/restic
-      ./modules/services/screen-locker
-      ./modules/services/shikane
-      ./modules/services/signaturepdf
-      ./modules/services/snixembed
-      ./modules/services/swayidle
-      ./modules/services/swaync
-      ./modules/services/swayosd
-      ./modules/services/swww
-      ./modules/services/sxhkd
-      ./modules/services/syncthing/linux
-      ./modules/services/tldr-update
-      ./modules/services/trayer
-      ./modules/services/trayscale
-      ./modules/services/twmn
-      ./modules/services/udiskie
-      ./modules/services/volnoti
-      ./modules/services/way-displays
-      ./modules/services/window-managers/bspwm
-      ./modules/services/window-managers/herbstluftwm
-      ./modules/services/window-managers/hyprland
-      ./modules/services/window-managers/i3
-      ./modules/services/window-managers/labwc
-      ./modules/services/window-managers/river
-      ./modules/services/window-managers/spectrwm
-      ./modules/services/window-managers/sway
-      ./modules/services/window-managers/wayfire
-      ./modules/services/wlsunset
-      ./modules/services/wob
-      ./modules/services/wpaperd
-      ./modules/services/xsettingsd
-      ./modules/services/yubikey-agent
-      ./modules/systemd
-      ./modules/targets-linux
-    ]
-  );
+  tests =
+    builtins.foldl'
+      (
+        a: b:
+        a
+        // (
+          let
+            imported = import b;
+          in
+          if lib.isFunction imported then imported { inherit lib pkgs; } else imported
+        )
+      )
+      { }
+      (
+        [
+          # keep-sorted start case=no numeric=yes
+          ./lib/deprecations
+          ./lib/generators
+          ./lib/mcp
+          ./lib/strings
+          ./lib/types
+          ./modules/files
+          ./modules/home-environment
+          ./modules/misc/fontconfig
+          ./modules/misc/manual
+          ./modules/misc/news
+          ./modules/misc/nix
+          ./modules/misc/nixpkgs-disabled
+          ./modules/misc/specialisation
+          ./modules/misc/ssh-auth-sock/default.nix
+          ./modules/misc/xdg
+          ./modules/xresources
+          # keep-sorted end
+        ]
+        ++ lib.optionals isDarwin [
+          # keep-sorted start case=no numeric=yes
+          ./modules/launchd
+          ./modules/targets-darwin
+          # keep-sorted end
+        ]
+        ++ lib.optionals isLinux [
+          # keep-sorted start case=no numeric=yes
+          ./modules/config/home-cursor
+          ./modules/config/i18n
+          ./modules/dbus
+          ./modules/i18n/input-method
+          ./modules/misc/debug
+          ./modules/misc/editorconfig
+          ./modules/misc/gtk
+          ./modules/misc/numlock
+          ./modules/misc/pam
+          ./modules/misc/qt
+          ./modules/misc/xdg/linux.nix
+          ./modules/misc/xsession
+          ./modules/services-modular
+          ./modules/systemd
+          ./modules/targets-linux
+          # keep-sorted end
+        ]
+        ++ (lib.concatMap
+          (
+            dir:
+            lib.pipe dir [
+              builtins.readDir
+              (lib.filterAttrs (_path: kind: kind == "directory"))
+              (lib.mapAttrsToList (path: _kind: lib.path.append dir path))
+            ]
+          )
+          [
+            ./modules/services
+            ./modules/programs
+          ]
+        )
+      );
 }

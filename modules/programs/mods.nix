@@ -11,7 +11,7 @@ let
   yamlFormat = pkgs.formats.yaml { };
 in
 {
-  meta.maintainers = [ lib.hm.maintainers.ipsavitsky ];
+  meta.maintainers = [ lib.maintainers.ipsavitsky ];
 
   options.programs.mods = {
     enable = lib.mkEnableOption "mods";
@@ -19,7 +19,7 @@ in
     package = lib.mkPackageOption pkgs "mods" { };
 
     settings = lib.mkOption {
-      type = yamlFormat.type;
+      inherit (yamlFormat) type;
       default = { };
       example = ''
         {

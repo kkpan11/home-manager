@@ -57,7 +57,7 @@ let
     options =
       let
         opt =
-          name: type:
+          _name: type:
           mkOption {
             type = types.nullOr type;
             default = null;
@@ -111,13 +111,11 @@ in
       settings = mkOption {
         type = vimSettingsType;
         default = { };
-        example = literalExpression ''
-          {
-            expandtab = true;
-            history = 1000;
-            background = "dark";
-          }
-        '';
+        example = {
+          expandtab = true;
+          history = 1000;
+          background = "dark";
+        };
         description = ''
           At attribute set of Vim settings. The attribute names and
           corresponding values must be among the following supported
@@ -152,12 +150,9 @@ in
         readOnly = true;
       };
 
-      packageConfigurable = mkOption {
-        type = types.package;
-        description = "Vim package to customize";
-        default = pkgs.vim-full or pkgs.vim_configurable;
-        defaultText = literalExpression "pkgs.vim-full";
-        example = literalExpression "pkgs.vim";
+      packageConfigurable = lib.mkPackageOption pkgs "vim-full" {
+        extraDescription = "Vim package to customize";
+        example = "pkgs.vim";
       };
 
       defaultEditor = mkOption {
@@ -165,7 +160,8 @@ in
         default = false;
         description = ''
           Whether to configure {command}`vim` as the default
-          editor using the {env}`EDITOR` environment variable.
+          editor using the {env}`EDITOR` and {env}`VISUAL`
+          environment variables.
         '';
       };
     };
@@ -216,7 +212,10 @@ in
 
       home.packages = [ cfg.package ];
 
-      home.sessionVariables = lib.mkIf cfg.defaultEditor { EDITOR = "vim"; };
+      home.sessionVariables = lib.mkIf cfg.defaultEditor {
+        EDITOR = "vim";
+        VISUAL = "vim";
+      };
 
       programs.vim = {
         package = vim;

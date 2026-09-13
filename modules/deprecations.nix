@@ -1,0 +1,63 @@
+{ lib, ... }:
+{
+  imports = [
+    (lib.mkRemovedOptionModule [ "programs" "rofi" "pass" ] ''
+      The rofi-pass module has been removed because nixpkgs removed the package.
+      The rofi-pass project is unmaintained upstream.
+    '')
+
+    (lib.mkRemovedOptionModule [ "programs" "animdl" ] ''
+      The animdl module has been removed because nixpkgs removed the package.
+      The animdl project was unmaintained and its scraper providers no longer
+      work.
+    '')
+
+    (lib.mkRemovedOptionModule [ "programs" "hexchat" ] ''
+      The hexchat module has been removed because nixpkgs removed the package.
+      HexChat was archived upstream and still depends on GTK 2.
+    '')
+
+    (lib.mkRemovedOptionModule [ "programs" "niriswitcher" "enable" ] ''
+      The niriswitcher module has been removed because the upstream project
+      has been archived.
+    '')
+
+    (lib.mkRemovedOptionModule [ "programs" "glab" "enable" ] ''
+      The glab module has been removed because changes are needed upstream to
+      support mixing declarative and stateful configurations. See #8066.
+    '')
+
+    (lib.mkRemovedOptionModule [ "services" "password-store-sync" ] ''
+      Use services.git-sync instead.
+    '')
+    (lib.mkRemovedOptionModule [ "services" "keepassx" ] ''
+      KeePassX is no longer maintained.
+    '')
+    (lib.mkRemovedOptionModule [ "programs" "thefuck" ] ''
+      The corresponding package was removed from nixpkgs,
+      consider using `programs.pay-respects` instead.
+    '')
+    (lib.mkRemovedOptionModule [ "programs" "octant" ] ''
+      Octant is no longer maintained and project was archived.
+    '')
+    (lib.mkRemovedOptionModule [ "services" "barrier" ] ''
+      The corresponding package was removed from nixpkgs,
+      consider using `deskflow` or `input-leap` instead.
+    '')
+  ]
+  # Just module removal
+  ++ (map
+    (
+      opt:
+      lib.mkRemovedOptionModule [ "programs" "just" opt ] ''
+        'program.just' is deprecated, simply add 'pkgs.just' to 'home.packages' instead.
+        See https://github.com/nix-community/home-manager/issues/3449#issuecomment-1329823502''
+    )
+    [
+      "enable"
+      "enableBashIntegration"
+      "enableZshIntegration"
+      "enableFishIntegration"
+    ]
+  );
+}

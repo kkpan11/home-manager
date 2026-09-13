@@ -7,6 +7,8 @@
 let
   inherit (lib)
     concatStringsSep
+    filterAttrs
+    hasPrefix
     mapAttrsToList
     mkIf
     mkOption
@@ -75,7 +77,7 @@ let
 
       keybindings = mkOption {
         type = types.attrsOf (types.nullOr types.str);
-        default = lib.mapAttrs (n: lib.mkOptionDefault) {
+        default = lib.mapAttrs (_n: lib.mkOptionDefault) {
           "${cfg.config.modifier}+Return" = "exec ${cfg.config.terminal}";
           "${cfg.config.modifier}+Shift+q" = "kill";
           "${cfg.config.modifier}+d" = "exec ${cfg.config.menu}";
@@ -155,9 +157,39 @@ let
           let
             modifier = config.wayland.windowManager.sway.config.modifier;
           in lib.mkOptionDefault {
-            "''${modifier}+Return" = "exec ${cfg.config.terminal}";
+            "''${modifier}+Return" = "exec ''${cfg.config.terminal}";
             "''${modifier}+Shift+q" = "kill";
-            "''${modifier}+d" = "exec ${cfg.config.menu}";
+            "''${modifier}+d" = "exec ''${cfg.config.menu}";
+          }
+        '';
+      };
+
+      bindswitches = mkOption {
+        type = types.attrsOf bindswitchOption;
+        default = { };
+        defaultText = "No bindswitches by default";
+        description = ''
+          Binds <switch> to execute the sway command command on state changes. Supported switches are lid (laptop
+          lid) and tablet (tablet mode) switches. Valid values for state are on, off and toggle. These switches are
+          on when the device lid is shut and when tablet mode is active respectively. toggle is also supported to run
+          a command both when the switch is toggled on or off.
+          See sway(5).
+        '';
+        example = lib.literalExpression ''
+          let
+            laptop = "eDP-1";
+          in
+          {
+            "lid:on" = {
+              reload = true;
+              locked = true;
+              action = "output ''${laptop} disable";
+            };
+            "lid:off" = {
+              reload = true;
+              locked = true;
+              action = "output ''${laptop} enable";
+            };
           }
         '';
       };
@@ -232,6 +264,26 @@ let
             "Return" = "mode default";
           };
         };
+        defaultText = lib.literalExpression ''
+          {
+            resize = {
+              # Binds arrow keys to resizing commands
+              ''${cfg.config.left}" = "resize shrink width 10 px";
+              ''${cfg.config.down}" = "resize grow height 10 px";
+              ''${cfg.config.up}" = "resize shrink height 10 px";
+              ''${cfg.config.right}" = "resize grow width 10 px";
+
+              "Left" = "resize shrink width 10 px";
+              "Down" = "resize grow height 10 px";
+              "Up" = "resize shrink height 10 px";
+              "Right" = "resize grow width 10 px";
+
+              # Exit resize mode
+              "Escape" = "mode default";
+              "Return" = "mode default";
+            };
+          }
+        '';
         description = ''
           An attribute set that defines binding modes and keybindings
           inside them
@@ -267,6 +319,42 @@ let
       };
   };
 
+  bindswitchOption = types.submodule {
+    options = {
+      action = mkOption {
+        type = types.str;
+        description = "The sway command to execute on state changes";
+      };
+
+      locked = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Unless the flag --locked is set, the command
+          will not be run when a screen locking program
+          is active. If there is a matching binding with
+          and without --locked, the one with will be preferred
+          when locked and the one without will be
+          preferred when unlocked.
+        '';
+      };
+
+      reload = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          If the --reload flag is given, the binding will
+          also be executed when the config is reloaded.
+          toggle bindings will not be executed on reload.
+          The --locked flag will operate as normal so if
+          the config is reloaded while locked and
+          --locked is not given, the binding will not be
+          executed.
+        '';
+      };
+    };
+  };
+
   commonFunctions = import ./lib/functions.nix {
     inherit config cfg lib;
     moduleName = "sway";
@@ -290,10 +378,31 @@ let
     ;
 
   startupEntryStr =
-    { command, always, ... }:
+    {
+      command,
+      always,
+      ...
+    }:
     ''
       ${if always then "exec_always" else "exec"} ${command}
     '';
+
+  bindswitchesStr =
+    bindswitches:
+    concatStringsSep "\n" (
+      mapAttrsToList (
+        event:
+        {
+          locked,
+          reload,
+          action,
+        }:
+        let
+          args = (lib.optionalString locked "--locked ") + (lib.optionalString reload "--reload ");
+        in
+        "bindswitch ${args} ${event} ${action}"
+      ) bindswitches
+    );
 
   moduleStr = moduleType: name: attrs: ''
     ${moduleType} "${name}" {
@@ -306,7 +415,12 @@ let
 
   variables = concatStringsSep " " cfg.systemd.variables;
   extraCommands = concatStringsSep " && " cfg.systemd.extraCommands;
-  systemdActivation = ''exec "${pkgs.dbus}/bin/dbus-update-activation-environment --systemd ${variables}; ${extraCommands}"'';
+  systemdActivation =
+    {
+      broker = ''exec "systemctl --user import-environment ${variables}; ${extraCommands}"'';
+      dbus = ''exec "${pkgs.dbus}/bin/dbus-update-activation-environment --systemd ${variables}; ${extraCommands}"'';
+    }
+    .${cfg.systemd.dbusImplementation};
 
   configFile = pkgs.writeTextFile {
     name = "sway.conf";
@@ -315,7 +429,12 @@ let
     checkPhase = lib.optionalString cfg.checkConfig ''
       export DBUS_SESSION_BUS_ADDRESS=/dev/null
       export XDG_RUNTIME_DIR=$(mktemp -d)
-      ${pkgs.xvfb-run}/bin/xvfb-run ${cfg.package}/bin/sway --config "$target" --validate --unsupported-gpu
+      ${pkgs.xvfb-run}/bin/xvfb-run ${cfg.package}/bin/sway --config "$target" --validate --unsupported-gpu || {
+        echo "Checking the sway config file failed. Normally, this happens because there are errors in the config file."
+        echo "But the check can also fail if the sway config file has dependencies on configuration that is not available in the Nix build sandbox (e.g. custom keyboard layouts defined in the NixOS configuration; background images in the user's home directory)."
+        echo "In that case, it may be necessary to set 'wayland.windowManager.sway.checkConfig = false;'."
+        exit 1
+      }
     '';
 
     text = concatStringsSep "\n" (
@@ -358,7 +477,10 @@ let
               })
               (keycodebindingsStr keycodebindings)
             ]
-            ++ mapAttrsToList inputStr input
+            ++ optional (builtins.attrNames bindswitches != [ ]) (bindswitchesStr bindswitches)
+            ++ mapAttrsToList inputStr (filterAttrs (n: _v: n == "*") input)
+            ++ mapAttrsToList inputStr (filterAttrs (n: _v: hasPrefix "type:" n) input)
+            ++ mapAttrsToList inputStr (filterAttrs (n: _v: n != "*" && !(hasPrefix "type:" n)) input)
             ++ mapAttrsToList outputStr output # outputs
             ++ mapAttrsToList seatStr seat # seats
             ++ mapAttrsToList (modeStr cfg.config.bindkeysToCode) modes # modes
@@ -378,14 +500,12 @@ let
       ++ [ cfg.extraConfig ]
     );
   };
-
 in
 {
   meta.maintainers = with lib.maintainers; [
     Scrumplex
     alexarice
     sumnerevans
-    oxalica
   ];
 
   imports =
@@ -412,12 +532,11 @@ in
     package = mkOption {
       type = with types; nullOr package;
       default = pkgs.sway.override {
-        extraSessionCommands = cfg.extraSessionCommands;
-        extraOptions = cfg.extraOptions;
+        inherit (cfg) extraOptions extraSessionCommands;
         withBaseWrapper = cfg.wrapperFeatures.base;
         withGtkWrapper = cfg.wrapperFeatures.gtk;
       };
-      defaultText = lib.literalExpression "${pkgs.sway}";
+      defaultText = lib.literalExpression "\${pkgs.sway}";
       description = ''
         Sway package to use. Will override the options
         'wrapperFeatures', 'extraSessionCommands', and 'extraOptions'.
@@ -431,7 +550,7 @@ in
     systemd = {
       enable = mkOption {
         type = types.bool;
-        default = pkgs.stdenv.isLinux;
+        default = pkgs.stdenv.hostPlatform.isLinux;
         example = false;
         description = ''
           Whether to enable {file}`sway-session.target` on
@@ -466,6 +585,23 @@ in
         example = [ "--all" ];
         description = ''
           Environment variables imported into the systemd and D-Bus user environment.
+        '';
+      };
+
+      dbusImplementation = mkOption {
+        type = types.enum [
+          "dbus"
+          "broker"
+        ];
+        default = "dbus";
+        example = "broker";
+        description = ''
+          The D-Bus implementation used on the system.
+          This affects which tool is used to import environment variables when starting the Sway session.
+          On NixOS, this should match the value of the option [`services.dbus.implementation` (NixOS)](https://nixos.org/manual/nixos/stable/options#opt-services.dbus.implementation).
+          When set to `dbus`, `dbus-update-activation-environment --systemd <variables>` is run.
+          Otherwise, when set to `broker`, `systemctl --user import-environment <variables>` is run.
+          See <https://github.com/swaywm/sway/wiki#systemd-and-dbus-activation-environments> for more documentation.
         '';
       };
 
@@ -567,20 +703,6 @@ in
 
   config = mkIf cfg.enable (
     lib.mkMerge [
-      (mkIf (cfg.config != null) {
-        warnings =
-          (optional (lib.isList cfg.config.fonts) "Specifying sway.config.fonts as a list is deprecated. Use the attrset version instead.")
-          ++ lib.flatten (
-            map (
-              b:
-              optional (lib.isList b.fonts) "Specifying sway.config.bars[].fonts as a list is deprecated. Use the attrset version instead."
-            ) cfg.config.bars
-          )
-          ++ [
-            (mkIf cfg.config.focus.forceWrapping "sway.config.focus.forceWrapping is deprecated, use focus.wrapping instead.")
-          ];
-      })
-
       {
         assertions = [
           (lib.hm.assertions.assertPlatform "wayland.windowManager.sway" pkgs lib.platforms.linux)
@@ -609,12 +731,27 @@ in
             BindsTo = [ "graphical-session.target" ];
             Wants = [
               "graphical-session-pre.target"
-            ] ++ optional cfg.systemd.xdgAutostart "xdg-desktop-autostart.target";
+            ]
+            ++ optional cfg.systemd.xdgAutostart "xdg-desktop-autostart.target";
             After = [ "graphical-session-pre.target" ];
             Before = optional cfg.systemd.xdgAutostart "xdg-desktop-autostart.target";
           };
         };
       }
+
+      (mkIf (cfg.config != null) {
+        warnings =
+          (optional (lib.isList cfg.config.fonts) "Specifying sway.config.fonts as a list is deprecated. Use the attrset version instead.")
+          ++ lib.flatten (
+            map (
+              b:
+              optional (lib.isList b.fonts) "Specifying sway.config.bars[].fonts as a list is deprecated. Use the attrset version instead."
+            ) cfg.config.bars
+          )
+          ++ [
+            (mkIf cfg.config.focus.forceWrapping "sway.config.focus.forceWrapping is deprecated, use focus.wrapping instead.")
+          ];
+      })
     ]
   );
 }

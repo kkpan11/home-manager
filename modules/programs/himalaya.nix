@@ -16,7 +16,7 @@ let
 
   # Needed for notmuch config, because the DB is here, and not in each
   # account's dir
-  maildirBasePath = config.accounts.email.maildirBasePath;
+  inherit (config.accounts.email) maildirBasePath;
 
   # make encryption config based on the given home-manager email
   # account TLS config
@@ -34,7 +34,7 @@ let
   mkAccountConfig =
     _: account:
     let
-      notmuchEnabled = account.notmuch.enable;
+      notmuchEnabled = account.enable && account.notmuch.enable;
       imapEnabled = !isNull account.imap && !notmuchEnabled;
       maildirEnabled = !isNull account.maildir && !imapEnabled && !notmuchEnabled;
 
@@ -43,10 +43,10 @@ let
         display-name = account.realName;
         default = account.primary;
         folder.aliases = {
-          inbox = account.folders.inbox;
-          sent = account.folders.sent;
-          drafts = account.folders.drafts;
-          trash = account.folders.trash;
+          inherit (account.folders) inbox;
+          inherit (account.folders) sent;
+          inherit (account.folders) drafts;
+          inherit (account.folders) trash;
         };
       };
 
@@ -107,7 +107,7 @@ let
 
 in
 {
-  meta.maintainers = with lib.hm.maintainers; [
+  meta.maintainers = with lib.maintainers; [
     soywod
     toastal
   ];
@@ -165,7 +165,7 @@ in
       configFile."himalaya/config.toml".source =
         let
           enabledAccounts = lib.filterAttrs (
-            _: account: account.himalaya.enable
+            _: account: account.enable && account.himalaya.enable
           ) config.accounts.email.accounts;
           accountsConfig = lib.mapAttrs mkAccountConfig enabledAccounts;
           globalConfig = compactAttrs himalaya.settings;

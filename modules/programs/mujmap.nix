@@ -9,7 +9,9 @@ let
 
   cfg = config.programs.mujmap;
 
-  mujmapAccounts = lib.filter (a: a.mujmap.enable) (lib.attrValues config.accounts.email.accounts);
+  mujmapAccounts = lib.filter (a: a.enable && a.mujmap.enable) (
+    lib.attrValues config.accounts.email.accounts
+  );
 
   missingNotmuchAccounts = map (a: a.name) (
     lib.filter (a: !a.notmuch.enable && a.mujmap.notmuchSetupWarning) mujmapAccounts
@@ -21,7 +23,7 @@ let
 
   settingsFormat = pkgs.formats.toml { };
 
-  filterNull = attrs: lib.attrsets.filterAttrs (n: v: v != null) attrs;
+  filterNull = attrs: lib.attrsets.filterAttrs (_n: v: v != null) attrs;
 
   configFile =
     account:

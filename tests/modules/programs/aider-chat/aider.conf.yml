@@ -1,0 +1,11 @@
+%YAML 1.1
+---
+architect: true
+auto-accept-architect: false
+cache-prompts: true
+check-model-accepts-settings: false
+dark-mode: true
+dirty-commits: false
+lint: true
+show-model-warnings: false
+verify-ssl: false

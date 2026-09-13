@@ -19,12 +19,7 @@ in
   options.services.flameshot = {
     enable = lib.mkEnableOption "Flameshot";
 
-    package = lib.mkOption {
-      type = lib.types.package;
-      default = pkgs.flameshot;
-      defaultText = lib.literalExpression "pkgs.flameshot";
-      description = "Package providing {command}`flameshot`.";
-    };
+    package = lib.mkPackageOption pkgs "flameshot" { };
 
     settings = lib.mkOption {
       inherit (iniFormat) type;
@@ -44,10 +39,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    assertions = [
-      (lib.hm.assertions.assertPlatform "services.flameshot" pkgs lib.platforms.linux)
-    ];
-
     home.packages = [ cfg.package ];
 
     xdg.configFile = lib.mkIf (cfg.settings != { }) {
@@ -72,7 +63,7 @@ in
 
       Service = {
         Environment = [ "PATH=${config.home.profileDirectory}/bin" ];
-        ExecStart = "${cfg.package}/bin/flameshot";
+        ExecStart = lib.getExe cfg.package;
         Restart = "on-abort";
 
         # Sandboxing.
@@ -83,6 +74,19 @@ in
         RestrictNamespaces = true;
         SystemCallArchitectures = "native";
         SystemCallFilter = "@system-service";
+      };
+    };
+
+    launchd.agents.flameshot = {
+      enable = true;
+      config = {
+        ProgramArguments = [ (lib.getExe cfg.package) ];
+        KeepAlive = {
+          Crashed = true;
+          SuccessfulExit = false;
+        };
+        ProcessType = "Interactive";
+        RunAtLoad = true;
       };
     };
   };

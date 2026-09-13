@@ -5,74 +5,21 @@
   ...
 }:
 let
-  inherit (lib) mkOption types;
+  inherit (lib) mkChangedOptionModule mkOption types;
 
   cfg = config.nix.gc;
-  darwinIntervals = [
-    "hourly"
-    "daily"
-    "weekly"
-    "monthly"
-    "semiannually"
-    "annually"
-  ];
-
-  mkCalendarInterval =
-    frequency:
-    let
-      freq = {
-        "hourly" = [ { Minute = 0; } ];
-        "daily" = [
-          {
-            Hour = 0;
-            Minute = 0;
-          }
-        ];
-        "weekly" = [
-          {
-            Weekday = 1;
-            Hour = 0;
-            Minute = 0;
-          }
-        ];
-        "monthly" = [
-          {
-            Day = 1;
-            Hour = 0;
-            Minute = 0;
-          }
-        ];
-        "semiannually" = [
-          {
-            Month = 1;
-            Day = 1;
-            Hour = 0;
-            Minute = 0;
-          }
-          {
-            Month = 7;
-            Day = 1;
-            Hour = 0;
-            Minute = 0;
-          }
-        ];
-        "annually" = [
-          {
-            Month = 1;
-            Day = 1;
-            Hour = 0;
-            Minute = 0;
-          }
-        ];
-      };
-    in
-    freq.${frequency};
 
   nixPackage =
     if config.nix.enable && config.nix.package != null then config.nix.package else pkgs.nix;
 in
 {
   meta.maintainers = [ lib.maintainers.shivaraj-bh ];
+
+  imports = [
+    (mkChangedOptionModule [ "nix" "gc" "frequency" ] [ "nix" "gc" "dates" ] (
+      config: lib.toList (lib.getAttrFromPath [ "nix" "gc" "frequency" ] config)
+    ))
+  ];
 
   options = {
     nix.gc = {
@@ -86,8 +33,9 @@ in
         '';
       };
 
-      frequency = mkOption {
-        type = types.str;
+      dates = mkOption {
+        type = with types; either singleLineStr (listOf str);
+        apply = lib.toList;
         default = "weekly";
         example = "03:15";
         description = ''
@@ -95,8 +43,7 @@ in
 
           On Linux this is a string as defined by {manpage}`systemd.time(7)`.
 
-          On Darwin it must be one of: ${toString darwinIntervals}, which are
-          implemented as defined in the manual page above.
+          ${lib.hm.darwin.intervalDocumentation}
         '';
       };
 
@@ -136,56 +83,51 @@ in
     };
   };
 
-  config = lib.mkIf cfg.automatic (
-    lib.mkMerge [
-      (lib.mkIf pkgs.stdenv.isLinux {
-        systemd.user.services.nix-gc = {
-          Unit = {
-            Description = "Nix Garbage Collector";
-          };
-          Service = {
-            Type = "oneshot";
-            ExecStart = toString (
-              pkgs.writeShellScript "nix-gc" "exec ${nixPackage}/bin/nix-collect-garbage ${
-                lib.optionalString (cfg.options != null) cfg.options
-              }"
-            );
-          };
-        };
-        systemd.user.timers.nix-gc = {
-          Unit = {
-            Description = "Nix Garbage Collector";
-          };
-          Timer = {
-            OnCalendar = "${cfg.frequency}";
-            RandomizedDelaySec = cfg.randomizedDelaySec;
-            Persistent = cfg.persistent;
-            Unit = "nix-gc.service";
-          };
-          Install = {
-            WantedBy = [ "timers.target" ];
-          };
-        };
-      })
+  config = lib.mkIf cfg.automatic {
+    systemd.user.services.nix-gc = {
+      Unit = {
+        Description = "Nix Garbage Collector";
+      };
+      Service = {
+        Type = "oneshot";
+        ExecStart = pkgs.writeShellScript "nix-gc" "exec ${nixPackage}/bin/nix-collect-garbage ${
+          lib.optionalString (cfg.options != null) cfg.options
+        }";
+      };
+    };
 
-      (lib.mkIf pkgs.stdenv.isDarwin {
-        assertions = [
-          {
-            assertion = lib.elem cfg.frequency darwinIntervals;
-            message = "On Darwin nix.gc.frequency must be one of: ${toString darwinIntervals}.";
-          }
-        ];
+    systemd.user.timers.nix-gc = {
+      Unit = {
+        Description = "Nix Garbage Collector";
+      };
+      Timer = {
+        OnCalendar = cfg.dates;
+        RandomizedDelaySec = cfg.randomizedDelaySec;
+        Persistent = cfg.persistent;
+        Unit = "nix-gc.service";
+      };
+      Install = {
+        WantedBy = [ "timers.target" ];
+      };
+    };
 
-        launchd.agents.nix-gc = {
-          enable = true;
-          config = {
-            ProgramArguments = [
-              "${nixPackage}/bin/nix-collect-garbage"
-            ] ++ lib.optional (cfg.options != null) cfg.options;
-            StartCalendarInterval = mkCalendarInterval cfg.frequency;
-          };
-        };
-      })
-    ]
-  );
+    assertions = [
+      {
+        assertion = pkgs.stdenv.hostPlatform.isDarwin -> (lib.length cfg.dates == 1);
+        message = "On Darwin, `nix.gc.dates` must contain a single element.";
+      }
+      (lib.hm.darwin.assertInterval "nix.gc.dates.*" (lib.elemAt cfg.dates 0) pkgs)
+    ];
+
+    launchd.agents.nix-gc = {
+      enable = true;
+      config = {
+        ProgramArguments = [
+          "${nixPackage}/bin/nix-collect-garbage"
+        ]
+        ++ lib.optional (cfg.options != null) cfg.options;
+        StartCalendarInterval = lib.hm.darwin.mkCalendarInterval (lib.elemAt cfg.dates 0);
+      };
+    };
+  };
 }
